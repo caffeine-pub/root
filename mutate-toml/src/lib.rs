@@ -19,16 +19,35 @@ fn parse_path(path: &str) -> Result<Vec<PathSegment>, String> {
     let mut segments = Vec::new();
     let mut current = String::new();
     let mut chars = path.chars().peekable();
+    let mut in_quotes = false;
 
     while let Some(c) = chars.next() {
         match c {
-            '.' => {
+            '"' if !in_quotes => {
+                // start of quoted segment — flush any current bare key
+                if !current.is_empty() {
+                    segments.push(PathSegment::Key(current.clone()));
+                    current.clear();
+                }
+                in_quotes = true;
+            }
+            '"' if in_quotes => {
+                // end of quoted segment
+                segments.push(PathSegment::Key(current.clone()));
+                current.clear();
+                in_quotes = false;
+                // consume trailing dot if present
+                if chars.peek() == Some(&'.') {
+                    chars.next();
+                }
+            }
+            '.' if !in_quotes => {
                 if !current.is_empty() {
                     segments.push(PathSegment::Key(current.clone()));
                     current.clear();
                 }
             }
-            '[' => {
+            '[' if !in_quotes => {
                 if !current.is_empty() {
                     segments.push(PathSegment::Key(current.clone()));
                     current.clear();
@@ -44,6 +63,9 @@ fn parse_path(path: &str) -> Result<Vec<PathSegment>, String> {
             }
             _ => current.push(c),
         }
+    }
+    if in_quotes {
+        return Err("unterminated quote in path".to_string());
     }
     if !current.is_empty() {
         segments.push(PathSegment::Key(current));
@@ -406,11 +428,17 @@ impl TomlEditor {
         let final_key = final_key
             .ok_or_else(|| JsError::new("path must end with a key for insertion"))?;
 
+        let quoted_key = if final_key.contains('.') {
+            format!("\"{}\"", final_key)
+        } else {
+            final_key.to_string()
+        };
+
         if table_segments.is_empty() {
             // top-level key
             self.edits.push(Edit {
                 range: self.source.len()..self.source.len(),
-                replacement: format!("{} = {}\n", final_key, value),
+                replacement: format!("{} = {}\n", quoted_key, value),
             });
             return Ok(());
         }
@@ -428,7 +456,7 @@ impl TomlEditor {
 
                 self.edits.push(Edit {
                     range: insert_pos..insert_pos,
-                    replacement: format!("{} = {}\n", final_key, value),
+                    replacement: format!("{} = {}\n", quoted_key, value),
                 });
                 return Ok(());
             }
@@ -437,7 +465,13 @@ impl TomlEditor {
         // create new table
         let table_key: String = table_segments.iter()
             .filter_map(|s| match s {
-                PathSegment::Key(k) => Some(k.as_str()),
+                PathSegment::Key(k) => {
+                    if k.contains('.') {
+                        Some(format!("\"{}\"", k))
+                    } else {
+                        Some(k.to_string())
+                    }
+                },
                 _ => None,
             })
             .collect::<Vec<_>>()
@@ -445,7 +479,7 @@ impl TomlEditor {
 
         self.edits.push(Edit {
             range: self.source.len()..self.source.len(),
-            replacement: format!("\n[{}]\n{} = {}\n", table_key, final_key, value),
+            replacement: format!("\n[{}]\n{} = {}\n", table_key, quoted_key, value),
         });
 
         Ok(())
@@ -535,5 +569,38 @@ mod tests {
         let mut editor = TomlEditor::new(toml).unwrap();
         editor.remove_at("items", 0).unwrap();
         assert_snapshot!(editor.finish().unwrap());
+    }
+
+    #[test]
+    fn set_dotted_key_in_existing_table() {
+        let toml = "[vscode.settings]\n\"editor.formatOnSave\" = true\n";
+        let mut editor = TomlEditor::new(toml).unwrap();
+        editor.set("vscode.settings.\"editor.tabSize\"", "2").unwrap();
+        assert_snapshot!(editor.finish().unwrap());
+    }
+
+    #[test]
+    fn set_dotted_key_new_table() {
+        let toml = "[package]\nname = \"test\"\n";
+        let mut editor = TomlEditor::new(toml).unwrap();
+        editor.set("vscode.settings.\"editor.formatOnSave\"", "true").unwrap();
+        assert_snapshot!(editor.finish().unwrap());
+    }
+
+    #[test]
+    fn remove_dotted_key() {
+        let toml = "[vscode.settings]\n\"editor.formatOnSave\" = true\n\"editor.tabSize\" = 2\n";
+        let mut editor = TomlEditor::new(toml).unwrap();
+        editor.remove("vscode.settings.\"editor.tabSize\"").unwrap();
+        assert_snapshot!(editor.finish().unwrap());
+    }
+
+    #[test]
+    fn parse_path_quoted_segments() {
+        let segments = parse_path("vscode.settings.\"editor.formatOnSave\"").unwrap();
+        assert_eq!(segments.len(), 3);
+        match &segments[0] { PathSegment::Key(k) => assert_eq!(k, "vscode"), _ => panic!() }
+        match &segments[1] { PathSegment::Key(k) => assert_eq!(k, "settings"), _ => panic!() }
+        match &segments[2] { PathSegment::Key(k) => assert_eq!(k, "editor.formatOnSave"), _ => panic!() }
     }
 }

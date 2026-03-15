@@ -29,6 +29,19 @@ function toTomlValue(value: unknown): string {
 }
 
 /**
+ * Quote a key segment if it contains dots or other characters
+ * that would be misinterpreted as path separators by the toml editor.
+ */
+function quoteSegment(key: string): string {
+  return key.includes(".") ? `"${key}"` : key;
+}
+
+function joinPath(prefix: string, key: string): string {
+  const seg = quoteSegment(key);
+  return prefix ? `${prefix}.${seg}` : seg;
+}
+
+/**
  * Deep diff two JS objects/values and emit operations.
  *
  * @param oldVal - the value currently represented in the TOML
@@ -56,13 +69,13 @@ export function deepDiff(
     // keys removed
     for (const key of Object.keys(oldObj)) {
       if (!(key in newObj)) {
-        ops.push({ type: "remove", path: path ? `${path}.${key}` : key });
+        ops.push({ type: "remove", path: joinPath(path, key) });
       }
     }
 
     // keys added or changed
     for (const [key, val] of Object.entries(newObj)) {
-      const childPath = path ? `${path}.${key}` : key;
+      const childPath = joinPath(path, key);
       if (!(key in oldObj)) {
         ops.push({ type: "set", path: childPath, value: toTomlValue(val) });
       } else {

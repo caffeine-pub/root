@@ -1,0 +1,39 @@
+export const WORKSPACE_TOML = "workspace.toml";
+export const PROJECT_TOML = ".project.toml";
+
+export const GITIGNORE = ".gitignore";
+export const NPMRC = ".npmrc";
+export const NVMRC = ".nvmrc";
+export const PRETTIERRC = ".prettierrc";
+export const PNPM_WORKSPACE = "pnpm-workspace.yaml";
+export const PNPM_LOCK = "pnpm-lock.yaml";
+export const TSCONFIG = "tsconfig.json";
+
+export const VSCODE = ".vscode";
+export const SETTINGS_JSON = "settings.json";
+export const SETTINGS_LOCAL_JSON = "settings.local.json";
+export const PACKAGE_JSON = "package.json";
+
+export const GITIGNORE_LIST = [
+  "node_modules/",
+  PACKAGE_JSON,
+  TSCONFIG,
+  PNPM_WORKSPACE,
+  PNPM_LOCK,
+  NPMRC,
+  NVMRC,
+  PRETTIERRC,
+  `${VSCODE}/${SETTINGS_JSON}`,
+  `${VSCODE}/${SETTINGS_LOCAL_JSON}`,
+];
+
+export const FILEIGNORE_LIST = (isSettingsJsonOnlyFileInVscode: boolean) => [
+  PACKAGE_JSON,
+  TSCONFIG,
+  PNPM_WORKSPACE,
+  PNPM_LOCK,
+  NPMRC,
+  NVMRC,
+  PRETTIERRC,
+  isSettingsJsonOnlyFileInVscode ? VSCODE : `${VSCODE}/${SETTINGS_JSON}`,
+];

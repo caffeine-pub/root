@@ -1,5 +1,5 @@
 /** Parsed workspace.toml */
-export interface WorkspaceConfig {
+declare interface WorkspaceConfig {
   /** Glob patterns for project discovery. e.g. ["*"], ["packages/*"] */
   projects: string[];
 
@@ -36,7 +36,7 @@ export interface WorkspaceConfig {
 }
 
 /** Parsed project.toml (lives in each package dir) */
-export interface ProjectConfig {
+declare interface ProjectConfig {
   /** Package-level package.json fields */
   package?: {
     name?: string;
@@ -56,7 +56,7 @@ export interface ProjectConfig {
 }
 
 /** A discovered project (resolved from glob + optional project.toml) */
-export interface ResolvedProject {
+declare interface ResolvedProject {
   /** Directory name relative to workspace root */
   dir: string;
 
@@ -71,7 +71,7 @@ export interface ResolvedProject {
 }
 
 /** Resolved workspace (root-level, analogous to ResolvedProject) */
-export interface ResolvedWorkspace {
+declare interface ResolvedWorkspace {
   /** Absolute path to workspace root */
   dir: string;
 
@@ -80,7 +80,7 @@ export interface ResolvedWorkspace {
 }
 
 /** Generated output files for a project */
-export interface GeneratedFiles {
+declare interface GeneratedFiles {
   /** path relative to workspace root -> file content */
   files: Map<string, string>;
 }

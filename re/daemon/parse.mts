@@ -3,14 +3,14 @@ import { readFile, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { glob } from "node:fs/promises";
-import type { WorkspaceConfig, ProjectConfig, ResolvedProject } from "./types.js";
+import * as Paths from "../paths.mjs";
 
 /**
  * Parse workspace.toml from a given root directory.
  * Throws if the file doesn't exist or is invalid TOML.
  */
 export async function parseWorkspaceToml(rootDir: string): Promise<WorkspaceConfig> {
-  const filePath = join(rootDir, "workspace.toml");
+  const filePath = join(rootDir, Paths.WORKSPACE_TOML);
   const content = await readFile(filePath, "utf-8");
   const raw = parseToml(content) as Record<string, unknown>;
 
@@ -30,7 +30,7 @@ export async function parseWorkspaceToml(rootDir: string): Promise<WorkspaceConf
  * Returns empty defaults if the file doesn't exist.
  */
 export async function parseProjectToml(projectDir: string): Promise<{ config: ProjectConfig; exists: boolean }> {
-  const filePath = join(projectDir, ".project.toml");
+  const filePath = join(projectDir, Paths.PROJECT_TOML);
 
   if (!existsSync(filePath)) {
     return { config: {}, exists: false };

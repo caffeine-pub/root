@@ -4,6 +4,9 @@ mutate-toml/target/
 mutate-toml/pkg/
 
 # re: generated files
+node_modules/
+package.json
+tsconfig.json
 pnpm-workspace.yaml
 pnpm-lock.yaml
 .npmrc
@@ -11,7 +14,3 @@ pnpm-lock.yaml
 .prettierrc
 .vscode/settings.json
 .vscode/settings.local.json
-tsconfig.base.json
-node_modules/
-**/package.json
-**/tsconfig.json

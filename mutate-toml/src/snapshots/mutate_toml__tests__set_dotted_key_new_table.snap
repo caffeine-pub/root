@@ -1,0 +1,9 @@
+---
+source: src/lib.rs
+expression: editor.finish().unwrap()
+---
+[package]
+name = "test"
+
+[vscode.settings]
+"editor.formatOnSave" = true
