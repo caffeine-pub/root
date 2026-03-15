@@ -48,17 +48,6 @@ function compact(obj: Record<string, unknown>): Record<string, unknown> {
   return result;
 }
 
-/** Merge two dep records, returning undefined if empty. */
-function mergeDeps(
-  ...sources: (Record<string, string> | undefined)[]
-): Record<string, string> | undefined {
-  const merged: Record<string, string> = {};
-  for (const src of sources) {
-    if (src) Object.assign(merged, src);
-  }
-  return Object.keys(merged).length > 0 ? merged : undefined;
-}
-
 // ── root files ────────────────────────────────────────────────
 
 function buildRootPackageJson(config: WorkspaceConfig): Record<string, unknown> {
@@ -102,16 +91,16 @@ function buildProjectPackageJson(
   config: WorkspaceConfig,
   project: ResolvedProject,
 ): Record<string, unknown> {
-  const ws = config.workspace ?? {};
-  const pkg = project.config.package ?? {};
+  const base = structuredClone(config.workspace ?? {}) as Record<string, unknown>;
+  const override = project.config.package ?? {};
+  const merged = deepMerge(base, override);
 
-  return compact({
-    name: pkg.name ?? project.dir,
-    version: pkg.version ?? ws.version ?? "0.0.0",
-    type: pkg.type ?? ws.type ?? "module",
-    dependencies: mergeDeps(ws.dependencies, pkg.dependencies),
-    devDependencies: mergeDeps(ws.devDependencies, pkg.devDependencies),
-  });
+  // defaults for fields that must exist
+  merged.name ??= project.dir;
+  merged.version ??= "0.0.0";
+  merged.type ??= "module";
+
+  return compact(merged);
 }
 
 function buildProjectTsconfig(
