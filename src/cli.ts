@@ -39,7 +39,8 @@ async function main() {
     case "generate": {
       const config = await parseWorkspaceToml(rootDir);
       const projects = await discoverProjects(rootDir, config);
-      const files = generateAll(config, projects);
+      const workspace = { dir: rootDir, config };
+      const files = generateAll(workspace, projects);
       const written = await writeGeneratedFiles(rootDir, files);
 
       await ensureGitignore(rootDir, [

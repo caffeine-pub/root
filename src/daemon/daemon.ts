@@ -4,11 +4,11 @@ import { parseWorkspaceToml, discoverProjects } from "./parse.js";
 import { generateAll } from "./generate.js";
 import { writeGeneratedFiles, ensureGitignore } from "./write.js";
 import { syncPackageJsonToToml } from "./sync/sync.js";
-import type { WorkspaceConfig, ResolvedProject } from "./types.js";
+import type { WorkspaceConfig, ResolvedProject, ResolvedWorkspace } from "./types.js";
 
 export interface DaemonState {
   rootDir: string;
-  config: WorkspaceConfig;
+  workspace: ResolvedWorkspace;
   projects: ResolvedProject[];
   /** Paths we just wrote — ignore the next change event for these */
   selfWritten: Set<string>;
@@ -35,7 +35,7 @@ export async function startDaemon(rootDir: string): Promise<{ stop: () => Promis
 
   const state: DaemonState = {
     rootDir,
-    config,
+    workspace: { dir: rootDir, config },
     projects,
     selfWritten: new Set(),
     generateTimer: null,
@@ -117,8 +117,8 @@ export async function startDaemon(rootDir: string): Promise<{ stop: () => Promis
  */
 async function handleTomlChange(state: DaemonState): Promise<void> {
   try {
-    state.config = await parseWorkspaceToml(state.rootDir);
-    state.projects = await discoverProjects(state.rootDir, state.config);
+    state.workspace = { dir: state.rootDir, config: await parseWorkspaceToml(state.rootDir) };
+    state.projects = await discoverProjects(state.rootDir, state.workspace.config);
     await regenerate(state);
   } catch (err) {
     console.error("re: error regenerating:", err);
@@ -133,7 +133,7 @@ async function handlePackageJsonChange(state: DaemonState, changedPath: string):
   state.syncTimer.delete(changedPath);
 
   try {
-    const modifiedToml = await syncPackageJsonToToml(changedPath, state.rootDir, state.config);
+    const modifiedToml = await syncPackageJsonToToml(changedPath, state.rootDir, state.workspace.config);
 
     if (modifiedToml) {
       // mark the toml file as self-written so the toml watcher ignores it
@@ -141,8 +141,8 @@ async function handlePackageJsonChange(state: DaemonState, changedPath: string):
       console.log(`re: synced to ${relative(state.rootDir, modifiedToml)}`);
 
       // re-parse and regenerate from the updated toml
-      state.config = await parseWorkspaceToml(state.rootDir);
-      state.projects = await discoverProjects(state.rootDir, state.config);
+      state.workspace = { dir: state.rootDir, config: await parseWorkspaceToml(state.rootDir) };
+      state.projects = await discoverProjects(state.rootDir, state.workspace.config);
       await regenerate(state);
     }
   } catch (err) {
@@ -156,7 +156,7 @@ async function handlePackageJsonChange(state: DaemonState, changedPath: string):
  * Generate all files and write them to disk.
  */
 async function regenerate(state: DaemonState): Promise<void> {
-  const files = generateAll(state.config, state.projects);
+  const files = generateAll(state.workspace, state.projects);
   const written = await writeGeneratedFiles(state.rootDir, files);
 
   // mark all written files as self-written so watchers ignore them

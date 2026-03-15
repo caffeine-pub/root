@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { WorkspaceConfig, ResolvedProject } from "./types.js";
+import type { WorkspaceConfig, ResolvedProject, ResolvedWorkspace, ProjectConfig } from "./types.js";
 
 function deepMerge<T extends Record<string, unknown>>(base: T, override: Partial<T>): T {
   const result = { ...base };
@@ -50,13 +50,13 @@ function compact(obj: Record<string, unknown>): Record<string, unknown> {
 
 // ── root files ────────────────────────────────────────────────
 
-function buildRootPackageJson(config: WorkspaceConfig): Record<string, unknown> {
-  const { workspace, engines } = config;
+function buildRootPackageJson(workspace: ResolvedWorkspace): Record<string, unknown> {
+  const { workspace: ws, engines } = workspace.config;
 
   return compact({
-    name: workspace?.name,
-    version: workspace?.version,
-    type: workspace?.type,
+    name: ws?.name ?? workspace.dir,
+    version: ws?.version ?? "0.0.0",
+    type: ws?.type ?? "module",
     engines: engines ? compact({ node: engines.node, pnpm: engines.pnpm }) : undefined,
     packageManager: engines?.pnpm ? `pnpm@${engines.pnpm}` : undefined,
     volta: engines?.node ? { node: engines.node } : undefined,
@@ -64,10 +64,11 @@ function buildRootPackageJson(config: WorkspaceConfig): Record<string, unknown> 
 }
 
 export function generateRootFiles(
-  config: WorkspaceConfig,
+  workspace: ResolvedWorkspace,
   projects: ResolvedProject[],
 ): Map<string, string> {
   const files = new Map<string, string>();
+  const config = workspace.config;
 
   files.set("pnpm-workspace.yaml", toYaml({ packages: projects.map(p => p.dir) }));
   files.set(".npmrc", "save-prefix=\n");
@@ -80,7 +81,7 @@ export function generateRootFiles(
     files.set(".nvmrc", config.engines.node + "\n");
   }
 
-  files.set("package.json", toJson(buildRootPackageJson(config)));
+  files.set("package.json", toJson(buildRootPackageJson(workspace)));
 
   return files;
 }
@@ -88,23 +89,21 @@ export function generateRootFiles(
 // ── project files ─────────────────────────────────────────────
 
 function buildProjectPackageJson(
-  config: WorkspaceConfig,
+  config: ProjectConfig,
   project: ResolvedProject,
 ): Record<string, unknown> {
-  const base = structuredClone(config.workspace ?? {}) as Record<string, unknown>;
-  const override = project.config.package ?? {};
-  const merged = deepMerge(base, override);
+  const pkg = config.package ?? {};
 
   // defaults for fields that must exist
-  merged.name ??= project.dir;
-  merged.version ??= "0.0.0";
-  merged.type ??= "module";
+  pkg.name = pkg.name ?? project.dir;
+  pkg.version ??= "0.0.0";
+  pkg.type ??= "module";
 
-  return compact(merged);
+  return compact(pkg);
 }
 
 function buildProjectTsconfig(
-  config: WorkspaceConfig,
+  config: ProjectConfig,
   project: ResolvedProject,
 ): Record<string, unknown> | null {
   const wsOpts = config.tsconfig?.compilerOptions;
@@ -122,14 +121,17 @@ function buildProjectTsconfig(
 }
 
 export function generateProjectFiles(
-  config: WorkspaceConfig,
+  workspace: ResolvedWorkspace,
   project: ResolvedProject,
 ): Map<string, string> {
   const files = new Map<string, string>();
 
-  files.set(join(project.dir, "package.json"), toJson(buildProjectPackageJson(config, project)));
+  const base = structuredClone(workspace.config.workspace ?? {}) as Record<string, unknown>;
+  const projectConfig = deepMerge(base, project.config.package ?? {}) as ProjectConfig;
 
-  const tsconfig = buildProjectTsconfig(config, project);
+  files.set(join(project.dir, "package.json"), toJson(buildProjectPackageJson(projectConfig, project)));
+
+  const tsconfig = buildProjectTsconfig(projectConfig, project);
   if (tsconfig) {
     files.set(join(project.dir, "tsconfig.json"), toJson(tsconfig));
   }
@@ -140,12 +142,12 @@ export function generateProjectFiles(
 // ── all ───────────────────────────────────────────────────────
 
 export function generateAll(
-  config: WorkspaceConfig,
+  workspace: ResolvedWorkspace,
   projects: ResolvedProject[],
 ): Map<string, string> {
-  const files = generateRootFiles(config, projects);
+  const files = generateRootFiles(workspace, projects);
   for (const project of projects) {
-    for (const [path, content] of generateProjectFiles(config, project)) {
+    for (const [path, content] of generateProjectFiles(workspace, project)) {
       files.set(path, content);
     }
   }

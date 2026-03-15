@@ -65,6 +65,15 @@ export interface ResolvedProject {
   hasProjectToml: boolean;
 }
 
+/** Resolved workspace (root-level, analogous to ResolvedProject) */
+export interface ResolvedWorkspace {
+  /** Absolute path to workspace root */
+  dir: string;
+
+  /** Parsed workspace.toml */
+  config: WorkspaceConfig;
+}
+
 /** Generated output files for a project */
 export interface GeneratedFiles {
   /** path relative to workspace root -> file content */
