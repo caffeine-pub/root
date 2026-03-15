@@ -1,24 +1,25 @@
 use std::ops::Range;
+use rowan::TextRange;
 use taplo::dom::node::DomNode;
 use taplo::dom::Node;
 use taplo::formatter;
 use taplo::parser::parse as parse_toml;
-use taplo::syntax::SyntaxKind;
+use taplo::syntax::{SyntaxElement, SyntaxKind, SyntaxNode};
 use wasm_bindgen::prelude::*;
 
-/// A segment of a key path: either a table key or an array index.
+// ── path parsing ──────────────────────────────────────────────
+
 #[derive(Debug, Clone)]
 enum PathSegment {
     Key(String),
     Index(usize),
 }
 
-/// Parse a path string like "package.dependencies" or "authors[0].name"
 fn parse_path(path: &str) -> Result<Vec<PathSegment>, String> {
     let mut segments = Vec::new();
     let mut current = String::new();
-
     let mut chars = path.chars().peekable();
+
     while let Some(c) = chars.next() {
         match c {
             '.' => {
@@ -34,33 +35,25 @@ fn parse_path(path: &str) -> Result<Vec<PathSegment>, String> {
                 }
                 let mut idx_str = String::new();
                 for c in chars.by_ref() {
-                    if c == ']' {
-                        break;
-                    }
+                    if c == ']' { break; }
                     idx_str.push(c);
                 }
-                let idx: usize = idx_str
-                    .parse()
+                let idx: usize = idx_str.parse()
                     .map_err(|_| format!("invalid array index: {}", idx_str))?;
                 segments.push(PathSegment::Index(idx));
             }
-            _ => {
-                current.push(c);
-            }
+            _ => current.push(c),
         }
     }
     if !current.is_empty() {
         segments.push(PathSegment::Key(current));
     }
-
     if segments.is_empty() {
         return Err("empty path".to_string());
     }
-
     Ok(segments)
 }
 
-/// Navigate to a node by path segments.
 fn resolve_path(root: &Node, segments: &[PathSegment]) -> Option<Node> {
     let mut node = root.clone();
     for seg in segments {
@@ -68,228 +61,249 @@ fn resolve_path(root: &Node, segments: &[PathSegment]) -> Option<Node> {
             PathSegment::Key(k) => node.get(k.as_str()),
             PathSegment::Index(i) => node.get(*i),
         };
-        if node.is_invalid() {
-            return None;
-        }
+        if node.is_invalid() { return None; }
     }
     Some(node)
 }
 
-/// Navigate to the parent and return (parent_node, last_segment).
-fn resolve_parent<'a>(
-    root: &Node,
-    segments: &'a [PathSegment],
-) -> Option<(Node, &'a PathSegment)> {
-    if segments.is_empty() {
-        return None;
-    }
-    let parent_path = &segments[..segments.len() - 1];
-    let last = &segments[segments.len() - 1];
-    if parent_path.is_empty() {
-        Some((root.clone(), last))
-    } else {
-        resolve_path(root, parent_path).map(|parent| (parent, last))
-    }
+// ── CST helpers ───────────────────────────────────────────────
+
+fn text_range_to_std(range: TextRange) -> Range<usize> {
+    usize::from(range.start())..usize::from(range.end())
 }
 
-/// A text edit: replace range with new text
-struct Edit {
-    range: Range<usize>,
-    replacement: String,
-}
-
-#[wasm_bindgen]
-pub struct TomlEditor {
-    source: String,
-    root: Node,
-    edits: Vec<Edit>,
-}
-
-/// Get the full text range of an ENTRY node (key = value) including any leading whitespace.
-/// Walks up from a value node to find the enclosing ENTRY.
-fn entry_range(node: &Node, source: &str) -> Option<Range<usize>> {
-    let syntax = node.syntax()?;
-    let mut current = syntax.clone();
+/// Walk up from a syntax element to find an ancestor of a given kind.
+fn find_ancestor(elem: &SyntaxElement, kind: SyntaxKind) -> Option<SyntaxNode> {
+    let mut current = elem.clone();
     loop {
         let parent = match &current {
             rowan::NodeOrToken::Node(n) => n.parent(),
             rowan::NodeOrToken::Token(t) => t.parent(),
         };
-        if let Some(p) = parent {
-            if p.kind() == SyntaxKind::ENTRY {
-                let range = p.text_range();
-                let start = usize::from(range.start());
-                let mut end = usize::from(range.end());
-                // include trailing newline
-                if end < source.len() && source.as_bytes()[end] == b'\n' {
-                    end += 1;
-                }
-                return Some(start..end);
-            }
-            current = rowan::NodeOrToken::Node(p);
-        } else {
-            break;
+        match parent {
+            Some(p) if p.kind() == kind => return Some(p),
+            Some(p) => current = rowan::NodeOrToken::Node(p),
+            None => return None,
         }
     }
-    None
 }
 
-/// Get the value-only text range of a node (not the key, just the value).
-fn value_range(node: &Node) -> Option<Range<usize>> {
-    // for a table node, text_ranges returns all ranges including children
-    // for a scalar, it returns just the value
-    let ranges: Vec<_> = node.text_ranges().collect();
-    if ranges.is_empty() {
-        return None;
+/// Collect the range of an ENTRY node plus its trailing NEWLINE sibling.
+fn entry_full_range(entry: &SyntaxNode) -> Range<usize> {
+    let start = usize::from(entry.text_range().start());
+    let mut end = usize::from(entry.text_range().end());
+
+    // check next sibling for NEWLINE
+    if let Some(next) = entry.next_sibling_or_token() {
+        if next.kind() == SyntaxKind::NEWLINE {
+            end = usize::from(next.text_range().end());
+        }
     }
-    // use the first range for scalar values
-    let range = &ranges[0];
-    Some(usize::from(range.start())..usize::from(range.end()))
+
+    start..end
 }
 
-/// Find the text range of an array element at a given index,
-/// including the adjacent comma and whitespace so removal produces valid TOML.
-fn array_element_range(array_node: &Node, index: usize, source: &str) -> Option<Range<usize>> {
-    let arr = array_node.as_array()?;
-    let items = arr.items().read();
-    let len = items.len();
-    let item = items.get(index)?;
+/// Given an ARRAY syntax node and a child VALUE index, compute the range
+/// to remove including the adjacent comma and whitespace.
+///
+/// CST structure: BRACKET_START, VALUE, COMMA, WS, VALUE, COMMA, WS, VALUE, BRACKET_END
+fn array_element_removal_range(
+    array_syntax: &SyntaxNode,
+    value_index: usize,
+) -> Option<Range<usize>> {
+    // collect VALUE children
+    let values: Vec<SyntaxElement> = array_syntax
+        .children_with_tokens()
+        .filter(|c| c.kind() == SyntaxKind::VALUE)
+        .collect();
 
-    if let Some(syntax) = item.syntax() {
-        let range = match syntax {
-            rowan::NodeOrToken::Node(n) => n.text_range(),
-            rowan::NodeOrToken::Token(t) => t.text_range(),
-        };
-        let mut start = usize::from(range.start());
-        let mut end = usize::from(range.end());
+    let len = values.len();
+    let target = values.get(value_index)?;
+    let target_range = target.text_range();
 
-        if len == 1 {
-            // only element — just remove the value, leave `[]`
-            return Some(start..end);
-        }
-
-        // not the last element: eat forward comma + trailing whitespace
-        let after = &source[end..];
-        if let Some(comma_offset) = after.find(',') {
-            if source[end..end + comma_offset].trim().is_empty() {
-                end = end + comma_offset + 1;
-                // eat trailing whitespace after comma
-                while end < source.len() && source.as_bytes()[end] == b' ' {
-                    end += 1;
-                }
-                return Some(start..end);
-            }
-        }
-
-        // last element: eat backward comma + whitespace between comma and value
-        let before = &source[..start];
-        if let Some(comma_pos) = before.rfind(',') {
-            if source[comma_pos + 1..start].trim().is_empty() {
-                start = comma_pos;
-                return Some(start..end);
-            }
-        }
-
-        return Some(start..end);
+    if len == 1 {
+        // only element — just remove the value, leave []
+        return Some(text_range_to_std(target_range));
     }
 
-    None
+    let mut start = usize::from(target_range.start());
+    let mut end = usize::from(target_range.end());
+
+    if value_index < len - 1 {
+        // not the last: eat forward — COMMA and WHITESPACE after this VALUE
+        let mut sib = target.next_sibling_or_token();
+        while let Some(s) = &sib {
+            match s.kind() {
+                SyntaxKind::COMMA | SyntaxKind::WHITESPACE | SyntaxKind::NEWLINE => {
+                    end = usize::from(s.text_range().end());
+                    sib = s.next_sibling_or_token();
+                }
+                _ => break,
+            }
+        }
+    } else {
+        // last element: eat backward — WHITESPACE and COMMA before this VALUE
+        let mut sib = target.prev_sibling_or_token();
+        while let Some(s) = &sib {
+            match s.kind() {
+                SyntaxKind::COMMA | SyntaxKind::WHITESPACE | SyntaxKind::NEWLINE => {
+                    start = usize::from(s.text_range().start());
+                    sib = s.prev_sibling_or_token();
+                }
+                _ => break,
+            }
+        }
+    }
+
+    Some(start..end)
+}
+
+/// Given an ARRAY syntax node, find the insertion point and separator for a new
+/// element at the given index.
+fn array_element_insertion(
+    array_syntax: &SyntaxNode,
+    index: usize,
+) -> Option<(usize, String)> {
+    let values: Vec<SyntaxElement> = array_syntax
+        .children_with_tokens()
+        .filter(|c| c.kind() == SyntaxKind::VALUE)
+        .collect();
+
+    let len = values.len();
+
+    if len == 0 {
+        // empty array — insert after BRACKET_START
+        let bracket = array_syntax
+            .children_with_tokens()
+            .find(|c| c.kind() == SyntaxKind::BRACKET_START)?;
+        let pos = usize::from(bracket.text_range().end());
+        return Some((pos, String::new()));
+    }
+
+    if index >= len {
+        // append after last element
+        let last = values.last()?;
+        let pos = usize::from(last.text_range().end());
+        return Some((pos, ", ".to_string()));
+    }
+
+    // insert before element at index
+    let target = &values[index];
+    let pos = usize::from(target.text_range().start());
+    Some((pos, String::new()))
+}
+
+// ── edits ─────────────────────────────────────────────────────
+
+struct Edit {
+    range: Range<usize>,
+    replacement: String,
+}
+
+// ── main API ──────────────────────────────────────────────────
+
+#[wasm_bindgen]
+pub struct TomlEditor {
+    source: String,
+    root: Node,
+    cst: SyntaxNode,
+    edits: Vec<Edit>,
 }
 
 #[wasm_bindgen]
 impl TomlEditor {
-    /// Parse a TOML string and return an editor for it.
     #[wasm_bindgen(constructor)]
     pub fn new(source: &str) -> Result<TomlEditor, JsError> {
         let parsed = parse_toml(source);
-
         if !parsed.errors.is_empty() {
-            return Err(JsError::new(&format!(
-                "TOML parse error: {}",
-                parsed.errors[0]
-            )));
+            return Err(JsError::new(&format!("TOML parse error: {}", parsed.errors[0])));
         }
-
+        let cst = SyntaxNode::new_root(parsed.green_node.clone());
         let root = parsed.into_dom();
 
-        Ok(TomlEditor {
-            source: source.to_string(),
-            root,
-            edits: Vec::new(),
-        })
+        Ok(TomlEditor { source: source.to_string(), root, cst, edits: Vec::new() })
     }
 
     /// Set a value at a path. Creates intermediate tables if needed.
-    /// Value should be a valid TOML value string (e.g. `"1.3.1"` with quotes for strings).
     pub fn set(&mut self, path: &str, value: &str) -> Result<(), JsError> {
         let segments = parse_path(path).map_err(|e| JsError::new(&e))?;
 
-        // try to find existing node
         if let Some(existing) = resolve_path(&self.root, &segments) {
-            if let Some(range) = value_range(&existing) {
+            // replace the existing value's range
+            let ranges: Vec<_> = existing.text_ranges().collect();
+            if let Some(range) = ranges.first() {
                 self.edits.push(Edit {
-                    range,
+                    range: text_range_to_std(*range),
                     replacement: value.to_string(),
                 });
                 return Ok(());
             }
         }
 
-        // node doesn't exist — insert
         self.insert_new_entry(&segments, value)
     }
 
-    /// Remove a key-value entry or array element at a path.
+    /// Remove a key-value entry at a path.
     pub fn remove(&mut self, path: &str) -> Result<(), JsError> {
         let segments = parse_path(path).map_err(|e| JsError::new(&e))?;
 
         let node = resolve_path(&self.root, &segments)
             .ok_or_else(|| JsError::new(&format!("not found: {}", path)))?;
 
-        // check if the last segment is an array index — if so, use array element removal
+        // if last segment is array index, delegate to remove_at
         if let Some(PathSegment::Index(idx)) = segments.last() {
-            if let Some((parent, _)) = resolve_parent(&self.root, &segments) {
-                if let Some(range) = array_element_range(&parent, *idx, &self.source) {
-                    self.edits.push(Edit {
-                        range,
-                        replacement: String::new(),
-                    });
-                    return Ok(());
+            let parent_segments = &segments[..segments.len() - 1];
+            let parent = if parent_segments.is_empty() {
+                self.root.clone()
+            } else {
+                resolve_path(&self.root, parent_segments)
+                    .ok_or_else(|| JsError::new("parent not found"))?
+            };
+
+            if let Some(arr) = parent.as_array() {
+                if let Some(syntax) = parent.syntax() {
+                    let array_syntax = match syntax {
+                        rowan::NodeOrToken::Node(n) => n.clone(),
+                        rowan::NodeOrToken::Token(t) => t.parent().ok_or_else(|| JsError::new("no parent"))?,
+                    };
+                    // find the ARRAY node in the CST
+                    let array_cst = if array_syntax.kind() == SyntaxKind::ARRAY {
+                        array_syntax
+                    } else {
+                        find_ancestor(&syntax, SyntaxKind::ARRAY)
+                            .ok_or_else(|| JsError::new("can't find ARRAY in CST"))?
+                    };
+
+                    if let Some(range) = array_element_removal_range(&array_cst, *idx) {
+                        self.edits.push(Edit { range, replacement: String::new() });
+                        return Ok(());
+                    }
                 }
             }
         }
 
-        // for table entries, walk up to the ENTRY syntax node
-        if let Some(range) = entry_range(&node, &self.source) {
-            self.edits.push(Edit {
-                range,
-                replacement: String::new(),
-            });
-            return Ok(());
+        // table entry — walk up to ENTRY node
+        if let Some(syntax) = node.syntax() {
+            if let Some(entry) = find_ancestor(syntax, SyntaxKind::ENTRY) {
+                self.edits.push(Edit {
+                    range: entry_full_range(&entry),
+                    replacement: String::new(),
+                });
+                return Ok(());
+            }
         }
 
-        // fallback
-        let ranges: Vec<_> = node.text_ranges().collect();
-        for range in ranges.iter().rev() {
-            self.edits.push(Edit {
-                range: usize::from(range.start())..usize::from(range.end()),
-                replacement: String::new(),
-            });
-        }
-
-        Ok(())
+        Err(JsError::new(&format!("couldn't determine removal range for: {}", path)))
     }
 
     /// Insert a value into an array at a given index.
-    /// Path should point to the array, e.g. "packages" or "package.authors".
     pub fn insert(&mut self, path: &str, index: usize, value: &str) -> Result<(), JsError> {
         let segments = parse_path(path).map_err(|e| JsError::new(&e))?;
 
         let array_node = resolve_path(&self.root, &segments)
-            .ok_or_else(|| JsError::new(&format!("array not found: {}", path)))?;
+            .ok_or_else(|| JsError::new(&format!("not found: {}", path)))?;
 
-        let arr = array_node
-            .as_array()
+        let arr = array_node.as_array()
             .ok_or_else(|| JsError::new(&format!("not an array: {}", path)))?;
 
         let items = arr.items().read();
@@ -297,112 +311,87 @@ impl TomlEditor {
 
         if index > len {
             return Err(JsError::new(&format!(
-                "index {} out of bounds for array of length {}",
-                index, len
+                "index {} out of bounds for array of length {}", index, len
             )));
         }
 
-        if len == 0 {
-            // empty array — find the `[]` and insert inside it
-            if let Some(syntax) = array_node.syntax() {
-                let text = match syntax {
-                    rowan::NodeOrToken::Node(n) => n.text_range(),
-                    rowan::NodeOrToken::Token(t) => t.text_range(),
-                };
-                let start = usize::from(text.start());
-                let end = usize::from(text.end());
-                // replace `[]` with `[value]`
-                self.edits.push(Edit {
-                    range: start..end,
-                    replacement: format!("[{}]", value),
-                });
-            }
-        } else if index == len {
-            // append after last element
-            let last = &items[len - 1];
-            if let Some(syntax) = last.syntax() {
-                let range = match syntax {
-                    rowan::NodeOrToken::Node(n) => n.text_range(),
-                    rowan::NodeOrToken::Token(t) => t.text_range(),
-                };
-                let end = usize::from(range.end());
-                self.edits.push(Edit {
-                    range: end..end,
-                    replacement: format!(", {}", value),
-                });
+        // find the ARRAY syntax node
+        let syntax = array_node.syntax()
+            .ok_or_else(|| JsError::new("no syntax for array"))?;
+        let array_cst = if syntax.kind() == SyntaxKind::ARRAY {
+            match syntax {
+                rowan::NodeOrToken::Node(n) => n.clone(),
+                _ => return Err(JsError::new("expected node")),
             }
         } else {
-            // insert before element at index
-            let target = &items[index];
-            if let Some(syntax) = target.syntax() {
-                let range = match syntax {
-                    rowan::NodeOrToken::Node(n) => n.text_range(),
-                    rowan::NodeOrToken::Token(t) => t.text_range(),
-                };
-                let start = usize::from(range.start());
-                self.edits.push(Edit {
-                    range: start..start,
-                    replacement: format!("{}, ", value),
-                });
-            }
-        }
+            find_ancestor(syntax, SyntaxKind::ARRAY)
+                .ok_or_else(|| JsError::new("can't find ARRAY in CST"))?
+        };
+
+        let (pos, prefix) = array_element_insertion(&array_cst, index)
+            .ok_or_else(|| JsError::new("couldn't find insertion point"))?;
+
+        let suffix = if index < len && len > 0 { ", " } else { "" };
+        let replacement = format!("{}{}{}", prefix, value, suffix);
+
+        self.edits.push(Edit {
+            range: pos..pos,
+            replacement,
+        });
 
         Ok(())
     }
 
     /// Remove an element from an array at a given index.
-    /// Path should point to the array.
     pub fn remove_at(&mut self, path: &str, index: usize) -> Result<(), JsError> {
         let segments = parse_path(path).map_err(|e| JsError::new(&e))?;
 
         let array_node = resolve_path(&self.root, &segments)
-            .ok_or_else(|| JsError::new(&format!("array not found: {}", path)))?;
+            .ok_or_else(|| JsError::new(&format!("not found: {}", path)))?;
 
-        let arr = array_node
-            .as_array()
+        let arr = array_node.as_array()
             .ok_or_else(|| JsError::new(&format!("not an array: {}", path)))?;
 
         let items = arr.items().read();
         if index >= items.len() {
             return Err(JsError::new(&format!(
-                "index {} out of bounds for array of length {}",
-                index,
-                items.len()
+                "index {} out of bounds for array of length {}", index, items.len()
             )));
         }
 
-        if let Some(range) = array_element_range(&array_node, index, &self.source) {
-            self.edits.push(Edit {
-                range,
-                replacement: String::new(),
-            });
-        }
+        let syntax = array_node.syntax()
+            .ok_or_else(|| JsError::new("no syntax for array"))?;
+        let array_cst = if syntax.kind() == SyntaxKind::ARRAY {
+            match syntax {
+                rowan::NodeOrToken::Node(n) => n.clone(),
+                _ => return Err(JsError::new("expected node")),
+            }
+        } else {
+            find_ancestor(syntax, SyntaxKind::ARRAY)
+                .ok_or_else(|| JsError::new("can't find ARRAY in CST"))?
+        };
 
+        let range = array_element_removal_range(&array_cst, index)
+            .ok_or_else(|| JsError::new("couldn't determine removal range"))?;
+
+        self.edits.push(Edit { range, replacement: String::new() });
         Ok(())
     }
 
     /// Apply all edits, format with taplo, return the result.
     pub fn finish(mut self) -> Result<String, JsError> {
-        // sort edits by range start descending — apply from end to start
-        self.edits
-            .sort_by(|a, b| b.range.start.cmp(&a.range.start));
-
+        self.edits.sort_by(|a, b| b.range.start.cmp(&a.range.start));
         let mut result = self.source.clone();
-
         for edit in &self.edits {
             result.replace_range(edit.range.clone(), &edit.replacement);
         }
-
-        // format with taplo
         let formatted = formatter::format(&result, formatter::Options::default());
         Ok(formatted)
     }
 }
 
 impl TomlEditor {
-    /// Insert a new key = value entry, creating tables as needed.
     fn insert_new_entry(&mut self, segments: &[PathSegment], value: &str) -> Result<(), JsError> {
-        // split into table path (all Key segments before the last Key) and the final key
         let mut table_segments = Vec::new();
         let mut final_key = None;
 
@@ -414,41 +403,39 @@ impl TomlEditor {
             }
         }
 
-        let final_key =
-            final_key.ok_or_else(|| JsError::new("path must end with a key for insertion"))?;
+        let final_key = final_key
+            .ok_or_else(|| JsError::new("path must end with a key for insertion"))?;
 
         if table_segments.is_empty() {
             // top-level key
-            let entry = format!("{} = {}\n", final_key, value);
             self.edits.push(Edit {
                 range: self.source.len()..self.source.len(),
-                replacement: entry,
+                replacement: format!("{} = {}\n", final_key, value),
             });
             return Ok(());
         }
 
-        // try to find the parent table
         if let Some(table_node) = resolve_path(&self.root, &table_segments) {
+            // find the last child entry's NEWLINE to insert after
             let ranges: Vec<_> = table_node.text_ranges().collect();
             if let Some(last_range) = ranges.last() {
                 let end = usize::from(last_range.end());
+                // find end of the line containing this range
                 let insert_pos = self.source[end..]
                     .find('\n')
                     .map(|i| end + i + 1)
                     .unwrap_or(self.source.len());
 
-                let entry = format!("{} = {}\n", final_key, value);
                 self.edits.push(Edit {
                     range: insert_pos..insert_pos,
-                    replacement: entry,
+                    replacement: format!("{} = {}\n", final_key, value),
                 });
                 return Ok(());
             }
         }
 
-        // table doesn't exist — create header
-        let table_key: String = table_segments
-            .iter()
+        // create new table
+        let table_key: String = table_segments.iter()
             .filter_map(|s| match s {
                 PathSegment::Key(k) => Some(k.as_str()),
                 _ => None,
@@ -456,10 +443,9 @@ impl TomlEditor {
             .collect::<Vec<_>>()
             .join(".");
 
-        let header = format!("\n[{}]\n{} = {}\n", table_key, final_key, value);
         self.edits.push(Edit {
             range: self.source.len()..self.source.len(),
-            replacement: header,
+            replacement: format!("\n[{}]\n{} = {}\n", table_key, final_key, value),
         });
 
         Ok(())
@@ -524,6 +510,30 @@ mod tests {
         let toml = "items = [1, 2, 3]\n";
         let mut editor = TomlEditor::new(toml).unwrap();
         editor.remove_at("items", 1).unwrap();
+        assert_snapshot!(editor.finish().unwrap());
+    }
+
+    #[test]
+    fn remove_first_from_array() {
+        let toml = "items = [1, 2, 3]\n";
+        let mut editor = TomlEditor::new(toml).unwrap();
+        editor.remove_at("items", 0).unwrap();
+        assert_snapshot!(editor.finish().unwrap());
+    }
+
+    #[test]
+    fn remove_last_from_array() {
+        let toml = "items = [1, 2, 3]\n";
+        let mut editor = TomlEditor::new(toml).unwrap();
+        editor.remove_at("items", 2).unwrap();
+        assert_snapshot!(editor.finish().unwrap());
+    }
+
+    #[test]
+    fn remove_only_element() {
+        let toml = "items = [42]\n";
+        let mut editor = TomlEditor::new(toml).unwrap();
+        editor.remove_at("items", 0).unwrap();
         assert_snapshot!(editor.finish().unwrap());
     }
 }
