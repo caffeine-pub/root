@@ -170,6 +170,7 @@ async function regenerate(state: DaemonState): Promise<void> {
     "pnpm-lock.yaml",
     ".npmrc",
     ".nvmrc",
+    ".prettierrc",
     "tsconfig.base.json",
     "node_modules/",
     "**/package.json",

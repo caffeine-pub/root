@@ -81,6 +81,10 @@ export function generateRootFiles(
     files.set(".nvmrc", config.engines.node + "\n");
   }
 
+  if (config.prettier) {
+    files.set(".prettierrc", toJson(config.prettier));
+  }
+
   files.set("package.json", toJson(buildRootPackageJson(workspace)));
 
   return files;

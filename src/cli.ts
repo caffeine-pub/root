@@ -48,6 +48,7 @@ async function main() {
         "pnpm-lock.yaml",
         ".npmrc",
         ".nvmrc",
+        ".prettierrc",
         "tsconfig.base.json",
         "node_modules/",
         "**/package.json",
