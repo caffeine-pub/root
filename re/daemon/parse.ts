@@ -21,6 +21,7 @@ export async function parseWorkspaceToml(rootDir: string): Promise<WorkspaceConf
     workspace: raw.workspace as WorkspaceConfig["workspace"],
     tsconfig: raw.tsconfig as WorkspaceConfig["tsconfig"],
     prettier: raw.prettier as Record<string, unknown> | undefined,
+    vscode: raw.vscode as WorkspaceConfig["vscode"],
   };
 }
 

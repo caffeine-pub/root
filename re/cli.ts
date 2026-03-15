@@ -40,7 +40,7 @@ async function main() {
       const config = await parseWorkspaceToml(rootDir);
       const projects = await discoverProjects(rootDir, config);
       const workspace = { dir: rootDir, config };
-      const files = generateAll(workspace, projects);
+      const files = await generateAll(workspace, projects);
       const written = await writeGeneratedFiles(rootDir, files);
 
       await ensureGitignore(rootDir, [
@@ -49,6 +49,8 @@ async function main() {
         ".npmrc",
         ".nvmrc",
         ".prettierrc",
+        ".vscode/settings.json",
+        ".vscode/settings.local.json",
         "tsconfig.base.json",
         "node_modules/",
         "**/package.json",

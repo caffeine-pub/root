@@ -46,7 +46,11 @@ export async function startDaemon(rootDir: string): Promise<{ stop: () => Promis
   await regenerate(state);
 
   // watch toml files for changes → regenerate
-  const tomlPaths = [join(rootDir, "workspace.toml"), ...projects.map(p => join(p.path, ".project.toml"))];
+  const tomlPaths = [
+    join(rootDir, "workspace.toml"),
+    join(rootDir, ".vscode", "settings.local.json"),
+    ...projects.map(p => join(p.path, ".project.toml")),
+  ];
 
   const tomlWatcher = watch(tomlPaths, {
     ignoreInitial: true,
@@ -156,7 +160,7 @@ async function handlePackageJsonChange(state: DaemonState, changedPath: string):
  * Generate all files and write them to disk.
  */
 async function regenerate(state: DaemonState): Promise<void> {
-  const files = generateAll(state.workspace, state.projects);
+  const files = await generateAll(state.workspace, state.projects);
   const written = await writeGeneratedFiles(state.rootDir, files);
 
   // mark all written files as self-written so watchers ignore them
@@ -171,6 +175,8 @@ async function regenerate(state: DaemonState): Promise<void> {
     ".npmrc",
     ".nvmrc",
     ".prettierrc",
+    ".vscode/settings.json",
+    ".vscode/settings.local.json",
     "tsconfig.base.json",
     "node_modules/",
     "**/package.json",

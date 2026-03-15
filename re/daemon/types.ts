@@ -28,6 +28,11 @@ export interface WorkspaceConfig {
 
   /** Prettier config — used by re to format toml, also generates .prettierrc */
   prettier?: Record<string, unknown>;
+
+  /** VS Code workspace settings → generates .vscode/settings.json */
+  vscode?: {
+    settings?: Record<string, unknown>;
+  };
 }
 
 /** Parsed project.toml (lives in each package dir) */

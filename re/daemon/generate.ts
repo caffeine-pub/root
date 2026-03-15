@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 import type { WorkspaceConfig, ResolvedProject, ResolvedWorkspace, ProjectConfig } from "./types.js";
 
 function deepMerge<T extends Record<string, unknown>>(base: T, override: Partial<T>): T {
@@ -63,10 +64,10 @@ function buildRootPackageJson(workspace: ResolvedWorkspace): Record<string, unkn
   });
 }
 
-export function generateRootFiles(
+export async function generateRootFiles(
   workspace: ResolvedWorkspace,
   projects: ResolvedProject[],
-): Map<string, string> {
+): Promise<Map<string, string>> {
   const files = new Map<string, string>();
   const config = workspace.config;
 
@@ -83,6 +84,22 @@ export function generateRootFiles(
 
   if (config.prettier) {
     files.set(".prettierrc", toJson(config.prettier));
+  }
+
+  if (config.vscode?.settings) {
+    let settings = config.vscode.settings;
+
+    // merge .vscode/settings.local.json on top if it exists
+    try {
+      const localPath = join(workspace.dir, ".vscode", "settings.local.json");
+      const local = JSON.parse(await readFile(localPath, "utf-8"));
+      settings = deepMerge(
+        structuredClone(settings) as Record<string, unknown>,
+        local as Record<string, unknown>,
+      );
+    } catch {}
+
+    files.set(join(".vscode", "settings.json"), toJson(settings));
   }
 
   files.set("package.json", toJson(buildRootPackageJson(workspace)));
@@ -128,6 +145,7 @@ export function generateProjectFiles(
   const files = new Map<string, string>();
 
   const base = structuredClone(workspace.config.workspace ?? {}) as Record<string, unknown>;
+  delete base.name; // name is never inherited from workspace
   const merged = deepMerge(base, project.config.package ?? {});
 
   files.set(join(project.dir, "package.json"), toJson(buildProjectPackageJson(merged, project)));
@@ -142,11 +160,11 @@ export function generateProjectFiles(
 
 // ── all ───────────────────────────────────────────────────────
 
-export function generateAll(
+export async function generateAll(
   workspace: ResolvedWorkspace,
   projects: ResolvedProject[],
-): Map<string, string> {
-  const files = generateRootFiles(workspace, projects);
+): Promise<Map<string, string>> {
+  const files = await generateRootFiles(workspace, projects);
   for (const project of projects) {
     for (const [path, content] of generateProjectFiles(workspace, project)) {
       files.set(path, content);
