@@ -1,0 +1,5 @@
+---
+source: src/lib.rs
+expression: editor.finish().unwrap()
+---
+items = [1, 3]

@@ -1,0 +1,9 @@
+---
+source: src/lib.rs
+expression: editor.finish().unwrap()
+---
+[package]
+name = "test"
+
+[dependencies]
+serde = "1.0"

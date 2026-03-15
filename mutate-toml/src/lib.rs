@@ -147,14 +147,14 @@ fn value_range(node: &Node) -> Option<Range<usize>> {
     Some(usize::from(range.start())..usize::from(range.end()))
 }
 
-/// Find the text range of an array element at a given index.
+/// Find the text range of an array element at a given index,
+/// including the adjacent comma and whitespace so removal produces valid TOML.
 fn array_element_range(array_node: &Node, index: usize, source: &str) -> Option<Range<usize>> {
     let arr = array_node.as_array()?;
     let items = arr.items().read();
+    let len = items.len();
     let item = items.get(index)?;
 
-    // for table arrays ([[thing]]), the entry is a full section
-    // for inline arrays, it's just the element
     if let Some(syntax) = item.syntax() {
         let range = match syntax {
             rowan::NodeOrToken::Node(n) => n.text_range(),
@@ -163,25 +163,30 @@ fn array_element_range(array_node: &Node, index: usize, source: &str) -> Option<
         let mut start = usize::from(range.start());
         let mut end = usize::from(range.end());
 
-        // try to include surrounding comma/whitespace for inline arrays
-        // look backwards for comma
-        let before = &source[..start];
-        if let Some(comma_pos) = before.rfind(',') {
-            // check there's only whitespace between comma and start
-            if source[comma_pos + 1..start].trim().is_empty() {
-                start = comma_pos;
-            }
+        if len == 1 {
+            // only element — just remove the value, leave `[]`
+            return Some(start..end);
         }
 
-        // or look forward for comma
+        // not the last element: eat forward comma + trailing whitespace
         let after = &source[end..];
         if let Some(comma_offset) = after.find(',') {
             if source[end..end + comma_offset].trim().is_empty() {
                 end = end + comma_offset + 1;
-                // also eat trailing whitespace
+                // eat trailing whitespace after comma
                 while end < source.len() && source.as_bytes()[end] == b' ' {
                     end += 1;
                 }
+                return Some(start..end);
+            }
+        }
+
+        // last element: eat backward comma + whitespace between comma and value
+        let before = &source[..start];
+        if let Some(comma_pos) = before.rfind(',') {
+            if source[comma_pos + 1..start].trim().is_empty() {
+                start = comma_pos;
+                return Some(start..end);
             }
         }
 
@@ -464,15 +469,14 @@ impl TomlEditor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use insta::assert_snapshot;
 
     #[test]
     fn set_existing_value() {
         let toml = "[package]\nname = \"test\"\nversion = \"0.1.0\"\n";
         let mut editor = TomlEditor::new(toml).unwrap();
         editor.set("package.version", "\"0.2.0\"").unwrap();
-        let result = editor.finish().unwrap();
-        assert!(result.contains("version = \"0.2.0\""), "got: {}", result);
-        assert!(result.contains("name = \"test\""), "got: {}", result);
+        assert_snapshot!(editor.finish().unwrap());
     }
 
     #[test]
@@ -480,13 +484,7 @@ mod tests {
         let toml = "[package]\nname = \"test\"\n";
         let mut editor = TomlEditor::new(toml).unwrap();
         editor.set("package.description", "\"a thing\"").unwrap();
-        let result = editor.finish().unwrap();
-        assert!(
-            result.contains("description = \"a thing\""),
-            "got: {}",
-            result
-        );
-        assert!(result.contains("name = \"test\""), "got: {}", result);
+        assert_snapshot!(editor.finish().unwrap());
     }
 
     #[test]
@@ -494,9 +492,7 @@ mod tests {
         let toml = "[package]\nname = \"test\"\n";
         let mut editor = TomlEditor::new(toml).unwrap();
         editor.set("dependencies.serde", "\"1.0\"").unwrap();
-        let result = editor.finish().unwrap();
-        assert!(result.contains("[dependencies]"), "got: {}", result);
-        assert!(result.contains("serde = \"1.0\""), "got: {}", result);
+        assert_snapshot!(editor.finish().unwrap());
     }
 
     #[test]
@@ -504,9 +500,7 @@ mod tests {
         let toml = "[package]\nname = \"test\"\nversion = \"0.1.0\"\n";
         let mut editor = TomlEditor::new(toml).unwrap();
         editor.remove("package.version").unwrap();
-        let result = editor.finish().unwrap();
-        assert!(!result.contains("version"), "got: {}", result);
-        assert!(result.contains("name = \"test\""), "got: {}", result);
+        assert_snapshot!(editor.finish().unwrap());
     }
 
     #[test]
@@ -514,12 +508,7 @@ mod tests {
         let toml = "items = [1, 2, 3]\n";
         let mut editor = TomlEditor::new(toml).unwrap();
         editor.insert("items", 1, "99").unwrap();
-        let result = editor.finish().unwrap();
-        assert!(
-            result.contains("99") && result.contains("1"),
-            "got: {}",
-            result
-        );
+        assert_snapshot!(editor.finish().unwrap());
     }
 
     #[test]
@@ -527,8 +516,7 @@ mod tests {
         let toml = "items = [1, 2, 3]\n";
         let mut editor = TomlEditor::new(toml).unwrap();
         editor.insert("items", 3, "4").unwrap();
-        let result = editor.finish().unwrap();
-        assert!(result.contains("4"), "got: {}", result);
+        assert_snapshot!(editor.finish().unwrap());
     }
 
     #[test]
@@ -536,9 +524,6 @@ mod tests {
         let toml = "items = [1, 2, 3]\n";
         let mut editor = TomlEditor::new(toml).unwrap();
         editor.remove_at("items", 1).unwrap();
-        let result = editor.finish().unwrap();
-        assert!(result.contains("1"), "got: {}", result);
-        assert!(result.contains("3"), "got: {}", result);
-        assert!(!result.contains("2"), "got: {}", result);
+        assert_snapshot!(editor.finish().unwrap());
     }
 }

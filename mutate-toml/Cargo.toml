@@ -14,3 +14,4 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
+insta = "1"
