@@ -1,0 +1,28 @@
+projects = ["re", "ts-dep-analyze"]
+
+[engines]
+node = "22.20.0"
+pnpm = "10.20.0"
+
+[workspace]
+name = "root"
+version = "0.1.0"
+type = "module"
+
+[workspace.devDependencies]
+tsx = "4.19.0"
+typescript = "5.7.3"
+"@types/node" = "22.0.0"
+prettier = "3.4.0"
+prettier-plugin-toml = "2.0.0"
+
+[tsconfig.compilerOptions]
+target = "esnext"
+module = "nodenext"
+moduleResolution = "nodenext"
+strict = true
+esModuleInterop = true
+skipLibCheck = true
+
+[prettier]
+plugins = ["prettier-plugin-toml"]

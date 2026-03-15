@@ -93,24 +93,21 @@ export function generateRootFiles(
 // ── project files ─────────────────────────────────────────────
 
 function buildProjectPackageJson(
-  config: ProjectConfig,
+  merged: Record<string, unknown>,
   project: ResolvedProject,
 ): Record<string, unknown> {
-  const pkg = config.package ?? {};
+  merged.name = (merged.name as string | undefined) ?? project.dir;
+  merged.version ??= "0.0.0";
+  merged.type ??= "module";
 
-  // defaults for fields that must exist
-  pkg.name = pkg.name ?? project.dir;
-  pkg.version ??= "0.0.0";
-  pkg.type ??= "module";
-
-  return compact(pkg);
+  return compact(merged);
 }
 
 function buildProjectTsconfig(
-  config: ProjectConfig,
+  wsConfig: WorkspaceConfig,
   project: ResolvedProject,
 ): Record<string, unknown> | null {
-  const wsOpts = config.tsconfig?.compilerOptions;
+  const wsOpts = wsConfig.tsconfig?.compilerOptions;
   const projOpts = project.config.tsconfig?.compilerOptions;
 
   if (!wsOpts && !projOpts) return null;
@@ -131,11 +128,11 @@ export function generateProjectFiles(
   const files = new Map<string, string>();
 
   const base = structuredClone(workspace.config.workspace ?? {}) as Record<string, unknown>;
-  const projectConfig = deepMerge(base, project.config.package ?? {}) as ProjectConfig;
+  const merged = deepMerge(base, project.config.package ?? {});
 
-  files.set(join(project.dir, "package.json"), toJson(buildProjectPackageJson(projectConfig, project)));
+  files.set(join(project.dir, "package.json"), toJson(buildProjectPackageJson(merged, project)));
 
-  const tsconfig = buildProjectTsconfig(projectConfig, project);
+  const tsconfig = buildProjectTsconfig(workspace.config, project);
   if (tsconfig) {
     files.set(join(project.dir, "tsconfig.json"), toJson(tsconfig));
   }
