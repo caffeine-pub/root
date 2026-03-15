@@ -143,7 +143,6 @@ async function handlePackageJsonChange(state: DaemonState, changedPath: string):
       changedPath,
       state.rootDir,
       state.config,
-      state.config.prettier,
     );
 
     if (modifiedToml) {
