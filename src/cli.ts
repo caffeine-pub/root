@@ -1,10 +1,10 @@
 #!/usr/bin/env tsx
 
 import { resolve } from "node:path";
-import { startDaemon } from "./daemon.js";
-import { parseWorkspaceToml, discoverProjects } from "./parse.js";
-import { generateAll } from "./generate.js";
-import { writeGeneratedFiles, ensureGitignore } from "./write.js";
+import { startDaemon } from "./daemon/daemon.js";
+import { parseWorkspaceToml, discoverProjects } from "./daemon/parse.js";
+import { generateAll } from "./daemon/generate.js";
+import { writeGeneratedFiles, ensureGitignore } from "./daemon/write.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -96,7 +96,7 @@ async function main() {
   }
 }
 
-main().catch((err) => {
+main().catch(err => {
   console.error("re:", err.message);
   process.exit(1);
 });
