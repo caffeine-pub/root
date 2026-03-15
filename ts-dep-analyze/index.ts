@@ -130,5 +130,8 @@ function toMermaid(nodes: ModuleNode[]): string {
   return lines.join("\n") + "\n";
 }
 
+const out = process.argv[3] ?? "deps.md";
 const nodes = await analyze(dir);
-console.log(toMermaid(nodes));
+const md = "```mermaid\n" + toMermaid(nodes) + "```\n";
+await import("node:fs/promises").then(fs => fs.writeFile(out, md));
+console.log(`wrote ${out}`);

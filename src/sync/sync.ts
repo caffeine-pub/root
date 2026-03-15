@@ -1,8 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, basename, join } from "node:path";
-import type { WorkspaceConfig, ProjectConfig } from "./types.js";
+import type { WorkspaceConfig, ProjectConfig } from "../types.js";
 import { deepDiff, type DiffOp } from "./diff.js";
-import { TomlEditor } from "../mutate-toml/pkg/mutate_toml.js";
+import { TomlEditor } from "../../mutate-toml/pkg/mutate_toml.js";
 
 /**
  * Apply a list of diff operations to a TOML source string using the CST-preserving editor.
