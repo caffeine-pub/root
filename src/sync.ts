@@ -76,7 +76,7 @@ async function syncProjectPackageJson(
   const newDevDeps = (newPkg.devDependencies ?? {}) as Record<string, string>;
 
   // read existing project.toml
-  const tomlPath = join(projectDir, "project.toml");
+  const tomlPath = join(projectDir, ".project.toml");
   let existingConfig: ProjectConfig;
   try {
     const content = await readFile(tomlPath, "utf-8");
@@ -154,14 +154,14 @@ async function updateWorkspaceToml(
 }
 
 /**
- * Read project.toml, apply a mutation, format with prettier, write back.
+ * Read .project.toml, apply a mutation, format with prettier, write back.
  */
 async function updateProjectToml(
   projectDir: string,
   mutate: (config: Record<string, unknown>) => void,
   prettierConfig?: Record<string, unknown>,
 ): Promise<string> {
-  const tomlPath = join(projectDir, "project.toml");
+  const tomlPath = join(projectDir, ".project.toml");
   let config: Record<string, unknown>;
   try {
     const content = await readFile(tomlPath, "utf-8");

@@ -150,12 +150,10 @@ export function generateProjectFiles(
       tsconfig.compilerOptions = {
         ...projectTsconfig,
         outDir: (projectTsconfig.outDir as string | undefined) ?? "dist",
-        rootDir: (projectTsconfig.rootDir as string | undefined) ?? "src",
       };
     } else {
       tsconfig.compilerOptions = {
         outDir: "dist",
-        rootDir: "src",
       };
     }
 

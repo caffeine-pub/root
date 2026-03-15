@@ -29,7 +29,7 @@ export async function parseWorkspaceToml(rootDir: string): Promise<WorkspaceConf
  * Returns empty defaults if the file doesn't exist.
  */
 export async function parseProjectToml(projectDir: string): Promise<{ config: ProjectConfig; exists: boolean }> {
-  const filePath = join(projectDir, "project.toml");
+  const filePath = join(projectDir, ".project.toml");
 
   if (!existsSync(filePath)) {
     return { config: {}, exists: false };

@@ -48,7 +48,7 @@ export async function startDaemon(rootDir: string): Promise<{ stop: () => Promis
   // watch toml files for changes → regenerate
   const tomlPaths = [
     join(rootDir, "workspace.toml"),
-    ...projects.map((p) => join(p.path, "project.toml")),
+    ...projects.map((p) => join(p.path, ".project.toml")),
   ];
 
   const tomlWatcher = watch(tomlPaths, {
@@ -94,7 +94,7 @@ export async function startDaemon(rootDir: string): Promise<{ stop: () => Promis
   });
 
   // watch for new project.toml files (new packages added)
-  const globWatcher = watch(join(rootDir, "*/project.toml"), {
+  const globWatcher = watch(join(rootDir, "*/.project.toml"), {
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 50 },
   });

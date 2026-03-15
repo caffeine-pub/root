@@ -8,7 +8,7 @@ a bidirectional monorepo config tool. `workspace.toml` + `project.toml`, everyth
 
 all generated files are gitignored. your repo on github is just source code and toml files.
 
-packages are discovered automatically — any directory with a `project.toml` is a package.
+packages are discovered automatically — any directory with a `.project.toml` is a package.
 
 ## daemon
 
@@ -79,9 +79,9 @@ useTabs = false
 
 lives in each package directory. overrides/extends workspace config.
 
-**caffeinec/project.toml**
+**caffeinec/.project.toml**
 ```toml
-# notice it's not [workspace], which gets inherited. this means you don't necessarily need a project.toml in these directories
+# notice it's not [workspace], which gets inherited. this means you don't necessarily need a .project.toml in these directories
 [package]
 name = "caffeinec"
 
@@ -92,7 +92,7 @@ smol-toml = "1.3.1"
 target = "ES2024"
 ```
 
-**caffeine-daemon/project.toml**
+**caffeine-daemon/.project.toml**
 ```toml
 [package]
 name = "caffeine-daemon"
@@ -102,7 +102,7 @@ caffeinec = "workspace:*"
 caffeine-common = "workspace:*"
 ```
 
-**site/project.toml**
+**site/.project.toml**
 ```toml
 [package]
 name = "site"
@@ -111,7 +111,7 @@ name = "site"
 
 ## what gets generated
 
-**pnpm-workspace.yaml** (auto-discovered from project.toml files)
+**pnpm-workspace.yaml** (auto-discovered from .project.toml files)
 ```yaml
 packages:
   - caffeinec
@@ -119,7 +119,7 @@ packages:
   - site
 ```
 
-**caffeinec/package.json** (merged: workspace.toml + caffeinec/project.toml)
+**caffeinec/package.json** (merged: workspace.toml + caffeinec/.project.toml)
 ```json
 {
   "name": "caffeinec",
@@ -208,7 +208,7 @@ when `re` is running and you do:
 cd caffeinec && pnpm add zod
 ```
 
-pnpm modifies `caffeinec/package.json`. `re` detects the change, parses the new package.json, sees `zod` was added, and updates `caffeinec/project.toml`:
+pnpm modifies `caffeinec/package.json`. `re` detects the change, parses the new package.json, sees `zod` was added, and updates `caffeinec/.project.toml`:
 
 ```toml
 [package.dependencies]
@@ -226,14 +226,14 @@ dependencies are always pinned to exact versions. no `^`, no `~`.
 
 ```
 caffeinec/
-  project.toml
-  src/
+  .project.toml
+  ./
 caffeine-daemon/
-  project.toml
-  src/
+  .project.toml
+  ./
 site/
-  project.toml
-  src/
+  .project.toml
+  ./
 workspace.toml
 ```
 
