@@ -6,7 +6,9 @@ import { parseWorkspaceToml, discoverProjects } from "./parse.mjs";
 import { writeGeneratedFiles, ensureGitignore } from "./write.mjs";
 
 import { deepDiff } from "./diff.mjs";
-import { TomlEditor } from "../../mutate-toml/pkg/mutate_toml.js";
+import { readFileSync } from "node:fs";
+import { TomlEditor, initSync } from "../mutate-toml/pkg/mutate_toml.js";
+initSync({ module: readFileSync(new URL("../mutate-toml/pkg/mutate_toml_bg.wasm", import.meta.url)) });
 import {
   rootPackageJsonLens,
   projectPackageJsonLens,

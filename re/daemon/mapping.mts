@@ -349,6 +349,24 @@ export function projectPackageJsonLens(
       },
     }),
 
+    field("files", {
+      get: p => p.package?.files,
+      put(p, files) {
+        const f = files as string[] | undefined;
+        const hasFiles = f && f.length > 0;
+        if (!hasFiles && !p.package?.files) return p;
+        return produce(p, d => { (d.package ??= {}).files = hasFiles ? f : undefined; });
+      },
+    }),
+
+    field("bin", {
+      get: p => p.package?.bin,
+      put(p, bin) {
+        if (!bin && !p.package?.bin) return p;
+        return produce(p, d => { (d.package ??= {}).bin = bin as Record<string, string> | undefined; });
+      },
+    }),
+
     field("scripts", {
       get: p => p.package?.scripts,
       put(p, scripts) {

@@ -12,6 +12,14 @@ rowan = "0.15"
 wasm-bindgen = "0.2"
 getrandom = { version = "0.3", features = ["wasm_js"] }
 
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O", "--enable-bulk-memory"]
+
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
 insta = "1"

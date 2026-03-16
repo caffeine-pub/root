@@ -44,6 +44,8 @@ declare interface ProjectConfig {
     type?: string;
     /** Set to true to remove "private": true from package.json (for publishing) */
     public?: boolean;
+    files?: string[];
+    bin?: Record<string, string>;
     scripts?: Record<string, string>;
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;

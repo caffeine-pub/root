@@ -1,7 +1,7 @@
 node_modules/
 dist/
-mutate-toml/target/
-mutate-toml/pkg/
+**/mutate-toml/target/
+**/mutate-toml/pkg/
 
 # re: generated files
 node_modules/
