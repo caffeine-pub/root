@@ -1,0 +1,32 @@
+[package]
+name = "site"
+version = "0.0.0"
+type = "module"
+
+[package.scripts]
+dev = "vite"
+build = "tsc && vite build"
+preview = "vite preview"
+
+[package.devDependencies]
+vite = "^8.0.0"
+
+[tsconfig.compilerOptions]
+target = "ES2023"
+useDefineForClassFields = true
+module = "ESNext"
+lib = ["ES2023", "DOM", "DOM.Iterable"]
+types = ["vite/client"]
+moduleResolution = "bundler"
+allowImportingTsExtensions = true
+verbatimModuleSyntax = true
+moduleDetection = "force"
+noEmit = true
+noUnusedLocals = true
+noUnusedParameters = true
+erasableSyntaxOnly = true
+noFallthroughCasesInSwitch = true
+noUncheckedSideEffectImports = true
+
+[tsconfig]
+include = ["src"]

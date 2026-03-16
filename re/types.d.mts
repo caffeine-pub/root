@@ -42,6 +42,9 @@ declare interface ProjectConfig {
     name?: string;
     version?: string;
     type?: string;
+    /** Set to true to remove "private": true from package.json (for publishing) */
+    public?: boolean;
+    scripts?: Record<string, string>;
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
   };
@@ -49,6 +52,7 @@ declare interface ProjectConfig {
   /** Package-level tsconfig overrides */
   tsconfig?: {
     compilerOptions?: Record<string, unknown>;
+    include?: string[];
   };
 
   /** Package-level script overrides */

@@ -332,11 +332,30 @@ export function projectPackageJsonLens(
       },
     }),
 
+    field("private", {
+      get: p => p.package?.public ? undefined : true,
+      put(p, priv) {
+        const isPublic = !priv;
+        if (isPublic === (p.package?.public ?? false)) return p;
+        return produce(p, d => { (d.package ??= {}).public = isPublic || undefined; });
+      },
+    }),
+
     field("type", {
       get: p => p.package?.type ?? wsPkg.type ?? "module",
       put(p, type) {
         if (!type || type === this.get(p)) return p;
         return produce(p, d => { (d.package ??= {}).type = type as string; });
+      },
+    }),
+
+    field("scripts", {
+      get: p => p.package?.scripts,
+      put(p, scripts) {
+        const s = scripts as Record<string, string> | undefined;
+        const hasScripts = s && Object.keys(s).length > 0;
+        if (!hasScripts && !p.package?.scripts) return p;
+        return produce(p, d => { (d.package ??= {}).scripts = hasScripts ? s : undefined; });
       },
     }),
 
@@ -355,7 +374,7 @@ export function projectTsconfigLens(
       const wsOpts = ws.tsconfig?.compilerOptions ?? {};
       const projOpts = project.tsconfig?.compilerOptions ?? {};
       if (Object.keys(wsOpts).length === 0 && Object.keys(projOpts).length === 0) return null;
-      return {
+      const result: Record<string, unknown> = {
         compilerOptions: {
           ...wsOpts,
           ...projOpts,
@@ -364,6 +383,8 @@ export function projectTsconfigLens(
           outDir: (projOpts.outDir as string | undefined) ?? "dist",
         },
       };
+      if (project.tsconfig?.include) result.include = project.tsconfig.include;
+      return result;
     },
     put(project, _tsconfig) { return project; },
   };

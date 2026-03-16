@@ -28,12 +28,13 @@ export const GITIGNORE_LIST = [
 ];
 
 export const FILEIGNORE_LIST = (isSettingsJsonOnlyFileInVscode: boolean) => [
-  PACKAGE_JSON,
-  TSCONFIG,
+  `**/${PACKAGE_JSON}`,
+  `**/${TSCONFIG}`,
   PNPM_WORKSPACE,
   PNPM_LOCK,
   NPMRC,
   NVMRC,
   PRETTIERRC,
-  isSettingsJsonOnlyFileInVscode ? VSCODE : `${VSCODE}/${SETTINGS_JSON}`,
+  // isSettingsJsonOnlyFileInVscode ? VSCODE : `${VSCODE}/${SETTINGS_JSON}`,
+  // wait for vscode#291047
 ];

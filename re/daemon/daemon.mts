@@ -267,7 +267,6 @@ export async function startDaemon(rootDir: string): Promise<{ stop: () => Promis
   // lockfile watcher: delete pnpm-lock.yaml as soon as it appears
   const lockWatcher = watch(join(rootDir, Paths.PNPM_LOCK), {
     ignoreInitial: false,
-    disableGlobbing: true,
   });
 
   lockWatcher.on("add", async () => {
