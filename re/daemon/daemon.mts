@@ -4,7 +4,7 @@ import { resolve, join, relative } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import { parseWorkspaceToml, discoverProjects } from "./parse.mjs";
 import { writeGeneratedFiles, ensureGitignore } from "./write.mjs";
-import { validate } from "./validate.mjs";
+
 import { deepDiff } from "./diff.mjs";
 import { TomlEditor } from "../../mutate-toml/pkg/mutate_toml.js";
 import {
@@ -108,13 +108,16 @@ export async function buildRegistry(
 
   // ── pnpm-workspace.yaml ───────────────────────────────────
   registry.set(Paths.PNPM_WORKSPACE, {
-    generate: () => toYaml({ packages: projects.map(p => p.dir) }),
+    generate: () => toYaml({
+      packages: projects.map(p => p.dir),
+      minimumReleaseAge: 4320,
+    }),
     sync: null,
   });
 
   // ── .npmrc ─────────────────────────────────────────────────
   registry.set(Paths.NPMRC, {
-    generate: () => "save-prefix=\n",
+    generate: () => "min-release-age=3\n",
     sync: null,
   });
 
@@ -261,6 +264,19 @@ export async function startDaemon(rootDir: string): Promise<{ stop: () => Promis
     );
   });
 
+  // lockfile watcher: delete pnpm-lock.yaml as soon as it appears
+  const lockWatcher = watch(join(rootDir, Paths.PNPM_LOCK), {
+    ignoreInitial: false,
+    disableGlobbing: true,
+  });
+
+  lockWatcher.on("add", async () => {
+    try {
+      await unlink(join(rootDir, Paths.PNPM_LOCK));
+      console.log("re: deleted pnpm-lock.yaml");
+    } catch {}
+  });
+
   // watch for new project.toml files
   const globWatcher = watch(join(rootDir, "*", Paths.PROJECT_TOML), {
     ignoreInitial: true,
@@ -279,6 +295,7 @@ export async function startDaemon(rootDir: string): Promise<{ stop: () => Promis
       for (const timer of state.syncTimer.values()) clearTimeout(timer);
       await internalWatcher.close();
       await externalWatcher.close();
+      await lockWatcher.close();
       await globWatcher.close();
       console.log("re: stopped");
     },
@@ -333,11 +350,6 @@ async function handleJsonChange(state: DaemonState, changedPath: string): Promis
 // ── regenerate ────────────────────────────────────────────────
 
 async function regenerate(state: DaemonState): Promise<void> {
-  const warnings = validate(state.workspace, state.projects);
-  for (const w of warnings) {
-    console.warn(`re: warning: ${w.file} → ${w.path}: ${w.message}`);
-  }
-
   // generate all files from registry
   const files = new Map<string, string>();
   for (const [path, entry] of registry) {
