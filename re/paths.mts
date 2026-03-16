@@ -1,6 +1,7 @@
 export const WORKSPACE_TOML = "workspace.toml";
 export const PROJECT_TOML = ".project.toml";
 
+export const RE_PID = ".re.pid";
 export const GITIGNORE = ".gitignore";
 export const NPMRC = ".npmrc";
 export const NVMRC = ".nvmrc";
@@ -16,6 +17,7 @@ export const PACKAGE_JSON = "package.json";
 
 export const GITIGNORE_LIST = [
   "node_modules/",
+  RE_PID,
   PACKAGE_JSON,
   TSCONFIG,
   PNPM_WORKSPACE,
@@ -28,6 +30,7 @@ export const GITIGNORE_LIST = [
 ];
 
 export const FILEIGNORE_LIST = (isSettingsJsonOnlyFileInVscode: boolean) => [
+  RE_PID,
   `**/${PACKAGE_JSON}`,
   `**/${TSCONFIG}`,
   PNPM_WORKSPACE,

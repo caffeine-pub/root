@@ -5,6 +5,7 @@ mutate-toml/pkg/
 
 # re: generated files
 node_modules/
+.re.pid
 package.json
 tsconfig.json
 pnpm-workspace.yaml
