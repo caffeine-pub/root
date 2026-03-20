@@ -22,7 +22,7 @@ export default defineConfig({
   },
   define: {
     __ROADMAP_LAST_MODIFIED__: JSON.stringify(
-      gitLastModified("src/routes/roadmap.tsx")
+      gitLastModified("src/routes/roadmap.tsx"),
     ),
   },
   plugins: [
@@ -33,6 +33,11 @@ export default defineConfig({
         exclude: "node_modules/**/*.{ts,js}",
       },
     }) as PluginOption,
-    nitro({ preset: "cloudflare-pages" }),
+    nitro({
+      preset: "cloudflare_module",
+      cloudflare: {
+        deployConfig: true,
+      },
+    }),
   ],
 });
