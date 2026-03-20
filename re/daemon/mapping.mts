@@ -83,6 +83,7 @@ export function deepMerge<T extends Record<string, unknown>>(base: T, override: 
     const val = override[key];
     if (
       val && typeof val === "object" && !Array.isArray(val) &&
+      Object.keys(val).length > 0 &&
       typeof result[key] === "object" && !Array.isArray(result[key])
     ) {
       result[key] = deepMerge(
