@@ -1,6 +1,5 @@
 // @refresh reload
 import { createHandler, StartServer } from "@solidjs/start/server";
-import { H3 } from "h3";
 
 export default createHandler(() => (
   <StartServer
@@ -19,4 +18,4 @@ export default createHandler(() => (
       </html>
     )}
   />
-)) as H3;
+));
