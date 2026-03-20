@@ -17,6 +17,9 @@ import "@fontsource/schibsted-grotesk/900.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 
+// fontpie fallback metrics
+import "./font-fallbacks.css";
+
 export default function App() {
   return (
     <Router

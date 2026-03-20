@@ -24,8 +24,8 @@ export function GlobalStyles() {
         --line: #e8e8e5;
         --card-bg: #fff;
         --card-border: #eee;
-        --grotesk: "Schibsted Grotesk", system-ui, sans-serif;
-        --mono: "IBM Plex Mono", monospace;
+        --grotesk: "Schibsted Grotesk", "Schibsted Grotesk Fallback", system-ui, sans-serif;
+        --mono: "IBM Plex Mono", "IBM Plex Mono Fallback", monospace;
       }
 
       * {
