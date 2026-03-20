@@ -1,6 +1,6 @@
 [package]
 name = "build-re"
-version = "1.0.1"
+version = "1.0.2"
 public = true
 files = ["dist"]
 

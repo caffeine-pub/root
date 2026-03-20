@@ -110,10 +110,16 @@ export async function buildRegistry(
 
   // ── pnpm-workspace.yaml ───────────────────────────────────
   registry.set(Paths.PNPM_WORKSPACE, {
-    generate: () => toYaml({
-      packages: projects.map(p => p.dir),
-      minimumReleaseAge: 4320,
-    }),
+    generate: () => {
+      const yaml: Record<string, unknown> = {
+        packages: projects.map(p => p.dir),
+        minimumReleaseAge: config.pnpm?.minimumReleaseAge ?? 4320,
+      };
+      if (config.pnpm?.minimumReleaseAgeExclude?.length) {
+        yaml.minimumReleaseAgeExclude = config.pnpm.minimumReleaseAgeExclude;
+      }
+      return toYaml(yaml);
+    },
     sync: null,
   });
 

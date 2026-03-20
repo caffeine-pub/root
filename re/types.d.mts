@@ -23,6 +23,12 @@ declare interface WorkspaceConfig {
     compilerOptions?: Record<string, unknown>;
   };
 
+  /** pnpm settings → goes into pnpm-workspace.yaml */
+  pnpm?: {
+    minimumReleaseAge?: number;
+    minimumReleaseAgeExclude?: string[];
+  };
+
   /** Prettier config — used by re to format toml, also generates .prettierrc */
   prettier?: Record<string, unknown>;
 
