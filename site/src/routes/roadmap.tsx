@@ -631,8 +631,7 @@ export default function MapPage() {
         </h1>
         <p>
           So this is awkward, but we don't actually have docs for Caffeine yet.
-          That's what I'm working on right now. In the meantime, take a look at
-          my brain dump document!
+          That's what I'm working on right now.
         </p>
       </div>
       <ChangelogStrip />

@@ -30,16 +30,15 @@ function Hero() {
   return (
     <div class="hero">
       <h1>
-        an <Highlight>open developer</Highlight>
+        an open developer
         <br />
-        <Highlight>group</Highlight> for
+        group for
         <br />
         building Caffeine ☕
       </h1>
       <p>
         Hi, it's just me right now, but I'm building Caffeine, a language and
-        web framework that compiles to TypeScript with an emphasis on developer
-        experience and performance.
+        web framework that compiles to TypeScript.
       </p>
       <p>
         Check out the <Link href="/roadmap">roadmap</Link> or{" "}
@@ -62,22 +61,28 @@ interface TimelineItem {
 
 const timelineData: TimelineItem[] = [
   {
-    date: "Mar 2026",
-    bold: "caffeine.pub website",
+    date: "Mar 20, 2026",
+    bold: "caffeine.pub",
     content: " is up",
-    // project: { label: "caffeine", href: "/caffeine" },
     now: true,
   },
   {
-    date: "Mar 2026",
+    date: "Mar 20, 2026",
+    content: "wrote up the roadmap page",
+  },
+  {
+    date: "Mar 17, 2026",
+    content: "designed the website",
+  },
+  {
+    date: "Mar 15, 2026",
     bold: "re v1.0.0",
-    content:
-      " is built. It's a JS monorepo manager that reduces the number of necessary configuration files",
+    content: ", a JS monorepo manager that reduces configuration file clutter",
     // project: { label: "re", href: "/re" },
   },
   {
-    date: "Mar 2026",
-    content: "The beginning of caffeine.pub",
+    date: "Mar 14, 2026",
+    content: "the root repo is created",
   },
 ];
 

@@ -2,7 +2,7 @@
 name = "site"
 
 [package.scripts]
-dev = "vinxi"
+dev = "vinxi dev"
 build = "tsc && vinxi build"
 preview = "vinxi preview"
 
