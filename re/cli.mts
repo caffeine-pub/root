@@ -17,7 +17,9 @@ async function readPid(): Promise<number | null> {
     process.kill(pid, 0);
     return pid;
   } catch {
-    try { await unlink(pidFile); } catch {}
+    try {
+      await unlink(pidFile);
+    } catch {}
     return null;
   }
 }
@@ -28,7 +30,9 @@ if (process.env.RE_DAEMON) {
 
   const cleanup = async () => {
     await stop();
-    try { await unlink(pidFile); } catch {}
+    try {
+      await unlink(pidFile);
+    } catch {}
     process.exit(0);
   };
 
@@ -73,7 +77,9 @@ if (process.env.RE_DAEMON) {
       }
 
       process.kill(pid, "SIGTERM");
-      try { await unlink(pidFile); } catch {}
+      try {
+        await unlink(pidFile);
+      } catch {}
       console.log(`re: daemon stopped (pid ${pid})`);
       process.exit(0);
     }
@@ -87,7 +93,9 @@ if (process.env.RE_DAEMON) {
 
       await ensureGitignore(rootDir, Paths.GITIGNORE_LIST);
 
-      console.log(`re: generated ${written.size} file${written.size === 1 ? "" : "s"}`);
+      console.log(
+        `re: generated ${written.size} file${written.size === 1 ? "" : "s"}`,
+      );
       break;
     }
 
@@ -109,32 +117,9 @@ if (process.env.RE_DAEMON) {
       break;
     }
 
-    case "run": {
-      const task = args[1];
-      const pkg = args[2];
-      if (!task) {
-        console.error("re: usage: re run <task> [pkg]");
-        process.exit(1);
-      }
-
-      const config = await parseWorkspaceToml(rootDir);
-
-      const script = config.scripts?.[task];
-      if (!script) {
-        console.error(`re: unknown task "${task}"`);
-        console.error(`re: available tasks: ${Object.keys(config.scripts ?? {}).join(", ")}`);
-        process.exit(1);
-      }
-
-      const cwd = pkg ? resolve(rootDir, pkg) : rootDir;
-      console.log(`re: running "${script}" in ${pkg ?? "root"}`);
-      execSync(script, { cwd, stdio: "inherit" });
-      break;
-    }
-
     default: {
       console.error(`re: unknown command "${command}"`);
-      console.error("re: commands: start, stop, generate, clean, run <task> [pkg]");
+      console.error("re: commands: start, stop, generate, clean");
       process.exit(1);
     }
   }

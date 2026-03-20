@@ -3,9 +3,6 @@ declare interface WorkspaceConfig {
   /** Glob patterns for project discovery. e.g. ["*"], ["packages/*"] */
   projects: string[];
 
-  /** Task definitions. e.g. { dev: "tsc --watch", build: "tsc --build" } */
-  scripts?: Record<string, string>;
-
   /** Node/pnpm version pinning */
   engines?: {
     node?: string;

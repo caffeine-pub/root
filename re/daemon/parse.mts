@@ -16,7 +16,6 @@ export async function parseWorkspaceToml(rootDir: string): Promise<WorkspaceConf
 
   return {
     projects: (raw.projects as string[] | undefined) ?? ["*"],
-    scripts: raw.scripts as Record<string, string> | undefined,
     engines: raw.engines as WorkspaceConfig["engines"],
     workspace: raw.workspace as WorkspaceConfig["workspace"],
     tsconfig: raw.tsconfig as WorkspaceConfig["tsconfig"],
