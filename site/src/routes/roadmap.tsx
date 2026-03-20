@@ -45,9 +45,43 @@ const changelog: ChangelogEntry[] = [
   },
   { badge: "moved", text: "analysis prototype: planned -> in progress" },
   { badge: "closed", text: "the caffeine.pub website" },
+  { badge: "closed", text: "re" },
 ];
 
 const areas: AreaData[] = [
+  {
+    name: "re (monorepo config manager)",
+    status: "solid",
+    statusLabel: "complete",
+    desc: "Declarative TOML-based monorepo configuration with bidirectional sync",
+    nodes: [
+      {
+        status: "solid",
+        name: "workspace.toml & project.toml parsing",
+        note: "Config files for package.json, tsconfig, prettier, vscode settings, engines, scripts",
+      },
+      {
+        status: "solid",
+        name: "bidirectional lens system",
+        note: "Edit generated JSON files and changes sync back to TOML via composable field lenses",
+      },
+      {
+        status: "solid",
+        name: "WASM TOML mutation",
+        note: "Write mutate-toml for preserving comments and formatting in toml files when syncing changes back",
+      },
+      {
+        status: "solid",
+        name: "daemon mode",
+        note: "Watches config files, regenerates on change",
+      },
+      {
+        status: "active",
+        name: "make it robust",
+        note: "Not all fields are supported, not all fields are synced. Add support when needed",
+      },
+    ],
+  },
   {
     name: "ts-hash (type-directed hashing)",
     status: "active",
@@ -120,7 +154,7 @@ const areas: AreaData[] = [
       },
     ],
     questions: [
-      "What happens when a new function is added by the user? We don't want to recompute everything and end slow like Crystal (https://arxiv.org/abs/2412.10632)",
+      "What happens when a new function is added by the user? We don't want to recompute everything and end up slow like Crystal (relevant: https://arxiv.org/abs/2412.10632)",
       "What are the edge cases where we lose context or precision in the points-to analysis? Even flow-insensitive field-sensitive interprocedural points-to is undecidable",
     ],
   },
