@@ -535,7 +535,7 @@ function AreaSection(props: { area: AreaData; index: number }) {
       <p class="area-desc">{props.area.desc}</p>
       {props.area.depends && (
         <div class="area-depends">
-          depends on →{" "}
+          depends on -&gt;{" "}
           <For each={props.area.depends}>{(dep) => <span>{dep}</span>}</For>
         </div>
       )}
