@@ -640,7 +640,13 @@ export default function MapPage() {
         </h1>
         <p>
           So this is awkward, but we don't actually have docs for Caffeine yet.
-          That's what I'm working on right now.
+          That's what I'm working on right now. In the meantime, you can read{" "}
+          <Link
+            href="https://github.com/caffeine-pub/root/blob/main/README.md"
+            external
+          >
+            my brain dump document!
+          </Link>
         </p>
       </div>
       <ChangelogStrip />
