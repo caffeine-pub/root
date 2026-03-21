@@ -61,10 +61,15 @@ interface TimelineItem {
 
 const timelineData: TimelineItem[] = [
   {
+    date: "Mar 21, 2026",
+    bold: "ts-hash",
+    content: ", compile-time generated hashing functions for TypeScript",
+    now: true,
+  },
+  {
     date: "Mar 20, 2026",
     bold: "caffeine.pub",
     content: " is up",
-    now: true,
   },
   {
     date: "Mar 20, 2026",
