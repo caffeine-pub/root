@@ -137,7 +137,7 @@ const areas: AreaData[] = [
         note: "Closures (w/ forward decls), calls, objects, fields, ifs, loops, and breaks should suffice",
       },
       {
-        status: "active",
+        status: "solid",
         name: "lexer & parser",
         note: "JS-like syntax for the above",
       },

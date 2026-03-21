@@ -1,4 +1,4 @@
-projects = ["re", "ts-dep-analyze", "ts-hash", "site"]
+projects = ["re", "ts-dep-analyze", "ts-hash", "pointsto", "site"]
 
 [engines]
 node = "22.20.0"
