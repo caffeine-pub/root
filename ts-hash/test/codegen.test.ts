@@ -601,6 +601,23 @@ describe("codegen", () => {
     expect(code).toMatchSnapshot();
   });
 
+  it("uses bracket notation for non-identifier property names", () => {
+    const t = target("Headers", {
+      kind: "object",
+      properties: [
+        { name: "content-type", type: { kind: "string" }, optional: false },
+        { name: "x-request-id", type: { kind: "string" }, optional: false },
+        { name: "normal", type: { kind: "string" }, optional: false },
+      ],
+    });
+    const code = generateHashFile([t]);
+    expect(code).toContain('value["content-type"]');
+    expect(code).toContain('value["x-request-id"]');
+    expect(code).toContain("value.normal");
+    expect(code).not.toContain('value["normal"]');
+    expect(code).toMatchSnapshot();
+  });
+
   it("uses custom hasher import path", () => {
     const t = target("Point", {
       kind: "object",

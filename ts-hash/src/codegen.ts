@@ -399,7 +399,9 @@ function emitObjectHash(
       continue;
     }
 
-    const propAccessor = `${accessor}.${prop.name}`;
+    const propAccessor = isValidIdentifier(prop.name)
+      ? `${accessor}.${prop.name}`
+      : `${accessor}[${JSON.stringify(prop.name)}]`;
     if (prop.optional) {
       lines.push(`${indent}if (${propAccessor} !== undefined) {`);
       lines.push(`${indent}  h.u8(1);`);
@@ -585,6 +587,11 @@ function emitUnionHash(
  * Try to find a discriminant field in a union of object types.
  * Returns the field name and a map of literal value → member.
  */
+const IDENT_RE = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+function isValidIdentifier(name: string): boolean {
+  return IDENT_RE.test(name);
+}
+
 function findDiscriminant(
   members: TypeNode[],
 ): { field: string; branches: [string | number | boolean, TypeNode][] } | null {
