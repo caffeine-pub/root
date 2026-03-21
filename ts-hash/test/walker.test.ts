@@ -244,6 +244,11 @@ describe("walker", () => {
     }
   });
 
+  it("walks generic recursive LinkedList", () => {
+    const t = targets.find((t) => t.name === "LinkedList")!;
+    expect(t.node).toMatchSnapshot();
+  });
+
   it("walks mixed named props + string index signature — collapses to pure indexSignature", () => {
     const mi = targets.find((t) => t.name === "MixedIndex")!;
     // String index sig absorbs all named string-keyed props,

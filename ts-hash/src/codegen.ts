@@ -25,8 +25,16 @@ export function generateHashFile(
     collectRefs(target.node, refNames);
   }
 
-  // Emit type aliases for ref targets (recursive types)
+  // Build a map of ref name → type param names for type annotation emission
   const targetsByName = new Map(targets.map((t) => [t.name, t]));
+  const refTypeParams = new Map<string, string[]>();
+  for (const target of targets) {
+    if (target.typeParams.length > 0) {
+      refTypeParams.set(target.name, target.typeParams.map((tp) => tp.name));
+    }
+  }
+
+  // Emit type aliases for ref targets (recursive types)
   for (const refName of refNames) {
     const refTarget = targetsByName.get(refName);
     if (refTarget) {
@@ -34,7 +42,7 @@ export function generateHashFile(
       const typeParamStr = refTarget.typeParams.length > 0
         ? `<${typeParamNames.join(", ")}>`
         : "";
-      const body = emitTypeAnnotation(refTarget.node, typeParamNames);
+      const body = emitTypeAnnotation(refTarget.node, typeParamNames, refTypeParams);
       lines.push(`type ${refTarget.name}${typeParamStr} = ${body};`);
     }
   }
@@ -51,20 +59,20 @@ export function generateHashFile(
           if (usedTypeParams.has(tp.name)) {
             if (tp.constraint) {
               // Existing constraint — intersect with hash requirement
-              const existingConstraint = emitTypeAnnotation(tp.constraint, target.typeParams.map((t) => t.name));
+              const existingConstraint = emitTypeAnnotation(tp.constraint, target.typeParams.map((t) => t.name), refTypeParams);
               return `${tp.name} extends ${existingConstraint} & { hash(h: Hasher): void }`;
             }
             return `${tp.name} extends { hash(h: Hasher): void }`;
           }
           if (tp.constraint) {
-            const existingConstraint = emitTypeAnnotation(tp.constraint, target.typeParams.map((t) => t.name));
+            const existingConstraint = emitTypeAnnotation(tp.constraint, target.typeParams.map((t) => t.name), refTypeParams);
             return `${tp.name} extends ${existingConstraint}`;
           }
           return tp.name;
         }).join(", ")}>`
       : "";
 
-    const valueType = emitTypeAnnotation(target.node, target.typeParams.map((tp) => tp.name));
+    const valueType = emitTypeAnnotation(target.node, target.typeParams.map((tp) => tp.name), refTypeParams);
     const composable = needsComposable.has(target.name);
 
     if (composable) {
@@ -164,7 +172,11 @@ function collectTypeParamUsage(node: TypeNode, used: Set<string>): void {
 /**
  * Emit a TypeScript type annotation string for a TypeNode.
  */
-function emitTypeAnnotation(node: TypeNode, typeParamNames: string[]): string {
+function emitTypeAnnotation(
+  node: TypeNode,
+  typeParamNames: string[],
+  refTypeParams: Map<string, string[]> = new Map(),
+): string {
   switch (node.kind) {
     case "string": return "string";
     case "number": return "number";
@@ -177,39 +189,42 @@ function emitTypeAnnotation(node: TypeNode, typeParamNames: string[]): string {
     case "numberLiteral": return String(node.value);
     case "booleanLiteral": return String(node.value);
     case "typeParameter": return node.name;
-    case "ref": return node.name;
+    case "ref": {
+      const params = refTypeParams.get(node.name);
+      return params ? `${node.name}<${params.join(", ")}>` : node.name;
+    }
 
     case "array":
-      const el = emitTypeAnnotation(node.element, typeParamNames);
+      const el = emitTypeAnnotation(node.element, typeParamNames, refTypeParams);
       return el.includes("|") || el.includes("&") ? `(${el})[]` : `${el}[]`;
 
     case "tuple":
       return `[${node.elements.map((e) => {
-        const t = emitTypeAnnotation(e.type, typeParamNames);
+        const t = emitTypeAnnotation(e.type, typeParamNames, refTypeParams);
         return e.optional ? `${t}?` : t;
       }).join(", ")}]`;
 
     case "union":
-      return node.members.map((m) => emitTypeAnnotation(m, typeParamNames)).join(" | ");
+      return node.members.map((m) => emitTypeAnnotation(m, typeParamNames, refTypeParams)).join(" | ");
 
     case "intersection":
-      return node.members.map((m) => emitTypeAnnotation(m, typeParamNames)).join(" & ");
+      return node.members.map((m) => emitTypeAnnotation(m, typeParamNames, refTypeParams)).join(" & ");
 
     case "indexSignature":
-      return `{ [key: ${node.keyType}]: ${emitTypeAnnotation(node.valueType, typeParamNames)} }`;
+      return `{ [key: ${node.keyType}]: ${emitTypeAnnotation(node.valueType, typeParamNames, refTypeParams)} }`;
 
     case "object": {
       const props = node.properties
         .filter((p) => !p.name.startsWith("["))
         .map((p) => {
           const opt = p.optional ? "?" : "";
-          return `${p.name}${opt}: ${emitTypeAnnotation(p.type, typeParamNames)}`;
+          return `${p.name}${opt}: ${emitTypeAnnotation(p.type, typeParamNames, refTypeParams)}`;
         });
       // Check for index signatures attached as pseudo-properties
       const indexProps = node.properties.filter((p) => p.name.startsWith("["));
       for (const ip of indexProps) {
         if (ip.type.kind === "indexSignature") {
-          props.push(`[key: ${ip.type.keyType}]: ${emitTypeAnnotation(ip.type.valueType, typeParamNames)}`);
+          props.push(`[key: ${ip.type.keyType}]: ${emitTypeAnnotation(ip.type.valueType, typeParamNames, refTypeParams)}`);
         }
       }
       return `{ ${props.join("; ")} }`;
@@ -224,10 +239,10 @@ function emitTypeAnnotation(node: TypeNode, typeParamNames: string[]): string {
       return "Date";
 
     case "map":
-      return `Map<${emitTypeAnnotation(node.keyType, typeParamNames)}, ${emitTypeAnnotation(node.valueType, typeParamNames)}>`;
+      return `Map<${emitTypeAnnotation(node.keyType, typeParamNames, refTypeParams)}, ${emitTypeAnnotation(node.valueType, typeParamNames, refTypeParams)}>`;
 
     case "set":
-      return `Set<${emitTypeAnnotation(node.elementType, typeParamNames)}>`;
+      return `Set<${emitTypeAnnotation(node.elementType, typeParamNames, refTypeParams)}>`;
 
     default:
       return "unknown";

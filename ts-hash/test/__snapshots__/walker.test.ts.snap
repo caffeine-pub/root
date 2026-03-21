@@ -354,6 +354,39 @@ exports[`walker > walks generic class GenericClass<T> 1`] = `
 }
 `;
 
+exports[`walker > walks generic recursive LinkedList 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "next",
+      "optional": false,
+      "type": {
+        "kind": "union",
+        "members": [
+          {
+            "kind": "null",
+          },
+          {
+            "kind": "ref",
+            "name": "__type",
+          },
+        ],
+      },
+    },
+    {
+      "name": "value",
+      "optional": false,
+      "type": {
+        "constraint": null,
+        "kind": "typeParameter",
+        "name": "T",
+      },
+    },
+  ],
+}
+`;
+
 exports[`walker > walks generic type alias Result<T, E> 1`] = `
 {
   "kind": "union",

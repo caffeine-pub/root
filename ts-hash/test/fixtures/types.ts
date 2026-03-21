@@ -147,3 +147,6 @@ export type MapOrObject = Map<string, number> | { [key: string]: number };
 
 /** @hash */
 export type SetOrArray = Set<string> | string[];
+
+/** @hash */
+export type LinkedList<T> = { value: T; next: LinkedList<T> | null };
