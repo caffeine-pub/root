@@ -6,7 +6,11 @@ version = "0.1.0"
 start = "tsx src/index.ts"
 
 [package.dependencies]
+ts-hash = "workspace:*"
+
+[package.devDependencies]
 typescript = "5.9.3"
+vitest = "^4.1.0"
 
 [tsconfig.compilerOptions]
 outDir = "dist"
