@@ -49,6 +49,7 @@ declare interface ProjectConfig {
     public?: boolean;
     files?: string[];
     bin?: Record<string, string>;
+    exports?: Record<string, string>;
     scripts?: Record<string, string>;
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;

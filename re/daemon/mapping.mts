@@ -368,6 +368,14 @@ export function projectPackageJsonLens(
       },
     }),
 
+    field("exports", {
+      get: p => p.package?.exports,
+      put(p, exports) {
+        if (!exports && !p.package?.exports) return p;
+        return produce(p, d => { (d.package ??= {}).exports = exports as Record<string, string> | undefined; });
+      },
+    }),
+
     field("scripts", {
       get: p => p.package?.scripts,
       put(p, scripts) {
