@@ -518,6 +518,89 @@ describe("codegen", () => {
     expect(code).toMatchSnapshot();
   });
 
+  it("emits Date hash with tag byte", () => {
+    const t = target("WithDate", {
+      kind: "object",
+      properties: [
+        { name: "created", type: { kind: "date" }, optional: false },
+      ],
+    });
+    const code = generateHashFile([t]);
+    expect(code).toContain("h.u8(0xD0)");
+    expect(code).toContain(".getTime()");
+    expect(code).toMatchSnapshot();
+  });
+
+  it("emits Map hash with tag byte and sorted entries", () => {
+    const t = target("WithMap", {
+      kind: "object",
+      properties: [
+        { name: "scores", type: { kind: "map", keyType: { kind: "string" }, valueType: { kind: "number" } }, optional: false },
+      ],
+    });
+    const code = generateHashFile([t]);
+    expect(code).toContain("h.u8(0xD1)");
+    expect(code).toContain(".entries()");
+    expect(code).toContain(".sort(");
+    expect(code).toMatchSnapshot();
+  });
+
+  it("emits Set hash with tag byte and sorted values", () => {
+    const t = target("WithSet", {
+      kind: "object",
+      properties: [
+        { name: "tags", type: { kind: "set", elementType: { kind: "string" } }, optional: false },
+      ],
+    });
+    const code = generateHashFile([t]);
+    expect(code).toContain("h.u8(0xD2)");
+    expect(code).toContain(".values()");
+    expect(code).toContain(".sort()");
+    expect(code).toMatchSnapshot();
+  });
+
+  it("emits instanceof checks for Date | number union", () => {
+    const t = target("DateOrNum", {
+      kind: "union",
+      members: [
+        { kind: "date" },
+        { kind: "number" },
+      ],
+    });
+    const code = generateHashFile([t]);
+    expect(code).toContain("instanceof Date");
+    expect(code).toContain("h.u8(0xD0)");
+    expect(code).toContain("h.f64(value)");
+    expect(code).toMatchSnapshot();
+  });
+
+  it("emits instanceof checks for Map | object union", () => {
+    const t = target("MapOrObj", {
+      kind: "union",
+      members: [
+        { kind: "map", keyType: { kind: "string" }, valueType: { kind: "number" } },
+        { kind: "indexSignature", keyType: "string", valueType: { kind: "number" } },
+      ],
+    });
+    const code = generateHashFile([t]);
+    expect(code).toContain("instanceof Map");
+    expect(code).toMatchSnapshot();
+  });
+
+  it("emits instanceof + Array.isArray for Set | array union", () => {
+    const t = target("SetOrArr", {
+      kind: "union",
+      members: [
+        { kind: "set", elementType: { kind: "string" } },
+        { kind: "array", element: { kind: "string" } },
+      ],
+    });
+    const code = generateHashFile([t]);
+    expect(code).toContain("instanceof Set");
+    expect(code).toContain("Array.isArray");
+    expect(code).toMatchSnapshot();
+  });
+
   it("uses custom hasher import path", () => {
     const t = target("Point", {
       kind: "object",

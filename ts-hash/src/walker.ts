@@ -22,6 +22,9 @@ export type TypeNode =
   | { kind: "enum"; name: string; members: { name: string; value: string | number }[] }
   | { kind: "typeParameter"; name: string; constraint: TypeNode | null }
   | { kind: "indexSignature"; keyType: "string" | "number"; valueType: TypeNode }
+  | { kind: "date" }
+  | { kind: "map"; keyType: TypeNode; valueType: TypeNode }
+  | { kind: "set"; elementType: TypeNode }
   | { kind: "ref"; name: string }; // reference to a named type (for recursion)
 
 export interface PropertyNode {
@@ -217,6 +220,38 @@ function walkType(
       return { kind: "ref", name: symbol?.getName() ?? `<recursive:${typeId}>` };
     }
     seen.add(typeId);
+
+    // Built-in types: Date, Map, Set
+    const typeName = type.getSymbol()?.getName();
+    if (typeName === "Date") {
+      seen.delete(typeId);
+      const result: TypeNode = { kind: "date" };
+      cache.set(typeId, result);
+      return result;
+    }
+    if (typeName === "Map") {
+      const typeRef = type as ts.TypeReference;
+      const typeArgs = checker.getTypeArguments(typeRef);
+      const result: TypeNode = {
+        kind: "map",
+        keyType: typeArgs[0] ? walkType(checker, typeArgs[0], seen, cache) : { kind: "string" },
+        valueType: typeArgs[1] ? walkType(checker, typeArgs[1], seen, cache) : { kind: "string" },
+      };
+      seen.delete(typeId);
+      cache.set(typeId, result);
+      return result;
+    }
+    if (typeName === "Set") {
+      const typeRef = type as ts.TypeReference;
+      const typeArgs = checker.getTypeArguments(typeRef);
+      const result: TypeNode = {
+        kind: "set",
+        elementType: typeArgs[0] ? walkType(checker, typeArgs[0], seen, cache) : { kind: "string" },
+      };
+      seen.delete(typeId);
+      cache.set(typeId, result);
+      return result;
+    }
 
     // Array
     if (checker.isArrayType(type)) {

@@ -116,6 +116,13 @@ function collectRefs(node: TypeNode, refs: Set<string>): void {
     case "indexSignature":
       collectRefs(node.valueType, refs);
       break;
+    case "map":
+      collectRefs(node.keyType, refs);
+      collectRefs(node.valueType, refs);
+      break;
+    case "set":
+      collectRefs(node.elementType, refs);
+      break;
   }
 }
 
@@ -143,6 +150,13 @@ function collectTypeParamUsage(node: TypeNode, used: Set<string>): void {
       break;
     case "indexSignature":
       collectTypeParamUsage(node.valueType, used);
+      break;
+    case "map":
+      collectTypeParamUsage(node.keyType, used);
+      collectTypeParamUsage(node.valueType, used);
+      break;
+    case "set":
+      collectTypeParamUsage(node.elementType, used);
       break;
   }
 }
@@ -205,6 +219,15 @@ function emitTypeAnnotation(node: TypeNode, typeParamNames: string[]): string {
       return node.members.map((m) =>
         typeof m.value === "string" ? JSON.stringify(m.value) : String(m.value)
       ).join(" | ");
+
+    case "date":
+      return "Date";
+
+    case "map":
+      return `Map<${emitTypeAnnotation(node.keyType, typeParamNames)}, ${emitTypeAnnotation(node.valueType, typeParamNames)}>`;
+
+    case "set":
+      return `Set<${emitTypeAnnotation(node.elementType, typeParamNames)}>`;
 
     default:
       return "unknown";
@@ -328,6 +351,34 @@ function emitHashBody(
       lines.push(`${indent}  h.f64(${accessor});`);
       lines.push(`${indent}}`);
       break;
+
+    case "date":
+      lines.push(`${indent}h.u8(0xD0);`); // tag: Date
+      lines.push(`${indent}h.f64(${accessor}.getTime());`);
+      break;
+
+    case "map": {
+      const entryVar = depth === 0 ? "_entry" : `_entry${depth}`;
+      lines.push(`${indent}h.u8(0xD1);`); // tag: Map
+      lines.push(`${indent}const ${entryVar}s = [...${accessor}.entries()].sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);`);
+      lines.push(`${indent}h.u32(${entryVar}s.length);`);
+      lines.push(`${indent}for (const ${entryVar} of ${entryVar}s) {`);
+      emitHashBody(lines, node.keyType, `${entryVar}[0]`, indent + "  ", typeParamNames, depth + 1);
+      emitHashBody(lines, node.valueType, `${entryVar}[1]`, indent + "  ", typeParamNames, depth + 1);
+      lines.push(`${indent}}`);
+      break;
+    }
+
+    case "set": {
+      const elVar = depth === 0 ? "_el" : `_el${depth}`;
+      lines.push(`${indent}h.u8(0xD2);`); // tag: Set
+      lines.push(`${indent}const _sorted${depth || ""} = [...${accessor}.values()].sort();`);
+      lines.push(`${indent}h.u32(_sorted${depth || ""}.length);`);
+      lines.push(`${indent}for (const ${elVar} of _sorted${depth || ""}) {`);
+      emitHashBody(lines, node.elementType, elVar, indent + "  ", typeParamNames, depth + 1);
+      lines.push(`${indent}}`);
+      break;
+    }
   }
 }
 
@@ -442,21 +493,63 @@ function emitUnionHash(
     return;
   }
 
-  // Split arrays/tuples from plain objects — typeof can't distinguish them
+  // Split object-like types that typeof can't distinguish.
+  // Order: instanceof checks (Date, Map, Set), Array.isArray, then plain objects.
+  const instanceofKinds: { kind: string; ctor: string }[] = [
+    { kind: "date", ctor: "Date" },
+    { kind: "map", ctor: "Map" },
+    { kind: "set", ctor: "Set" },
+  ];
   const arrayMembers = members.filter((m) => m.kind === "array" || m.kind === "tuple");
-  const nonArrayMembers = members.filter((m) => m.kind !== "array" && m.kind !== "tuple");
-  if (arrayMembers.length > 0 && nonArrayMembers.length > 0) {
-    lines.push(`${indent}if (Array.isArray(${accessor})) {`);
-    if (arrayMembers.length === 1) {
-      emitHashBody(lines, arrayMembers[0], accessor, indent + "  ", typeParamNames, depth);
-    } else {
-      emitUnionHash(lines, arrayMembers, accessor, indent + "  ", typeParamNames, depth);
+  const instanceofMembers = members.filter((m) => instanceofKinds.some((ik) => ik.kind === m.kind));
+  const plainMembers = members.filter(
+    (m) => !instanceofKinds.some((ik) => ik.kind === m.kind)
+      && m.kind !== "array" && m.kind !== "tuple",
+  );
+
+  // If we have a mix of instanceof/array/plain types, emit branching.
+  // Also fires when we have instanceof + array but no plain members (e.g. Set | string[])
+  const needsInstanceofSplit = instanceofMembers.length > 0
+    && (arrayMembers.length > 0 || plainMembers.length > 0);
+  const needsArraySplit = arrayMembers.length > 0 && plainMembers.length > 0;
+  if (needsInstanceofSplit || needsArraySplit) {
+    let first = true;
+
+    // instanceof checks first
+    for (const member of instanceofMembers) {
+      const ctor = instanceofKinds.find((ik) => ik.kind === member.kind)!.ctor;
+      if (first) {
+        lines.push(`${indent}if (${accessor} instanceof ${ctor}) {`);
+        first = false;
+      } else {
+        lines.push(`${indent}} else if (${accessor} instanceof ${ctor}) {`);
+      }
+      emitHashBody(lines, member, accessor, indent + "  ", typeParamNames, depth);
     }
-    lines.push(`${indent}} else {`);
-    if (nonArrayMembers.length === 1) {
-      emitHashBody(lines, nonArrayMembers[0], accessor, indent + "  ", typeParamNames, depth);
-    } else {
-      emitUnionHash(lines, nonArrayMembers, accessor, indent + "  ", typeParamNames, depth);
+
+    // Array.isArray check
+    if (arrayMembers.length > 0) {
+      if (first) {
+        lines.push(`${indent}if (Array.isArray(${accessor})) {`);
+        first = false;
+      } else {
+        lines.push(`${indent}} else if (Array.isArray(${accessor})) {`);
+      }
+      if (arrayMembers.length === 1) {
+        emitHashBody(lines, arrayMembers[0], accessor, indent + "  ", typeParamNames, depth);
+      } else {
+        emitUnionHash(lines, arrayMembers, accessor, indent + "  ", typeParamNames, depth);
+      }
+    }
+
+    // Remaining types in else branch (if any)
+    if (plainMembers.length > 0) {
+      lines.push(`${indent}} else {`);
+      if (plainMembers.length === 1) {
+        emitHashBody(lines, plainMembers[0], accessor, indent + "  ", typeParamNames, depth);
+      } else {
+        emitUnionHash(lines, plainMembers, accessor, indent + "  ", typeParamNames, depth);
+      }
     }
     lines.push(`${indent}}`);
     return;
@@ -573,6 +666,9 @@ function typeofKind(node: TypeNode): string | null {
     case "object":
     case "array":
     case "tuple":
+    case "date":
+    case "map":
+    case "set":
       return "object";
     default:
       return null;

@@ -201,6 +201,49 @@ describe("walker", () => {
     expect(t.node).toMatchSnapshot();
   });
 
+  it("walks Date field", () => {
+    const t = targets.find((t) => t.name === "WithDate")!;
+    expect(t.node.kind).toBe("object");
+    if (t.node.kind === "object") {
+      const created = t.node.properties.find((p) => p.name === "created")!;
+      expect(created.type.kind).toBe("date");
+    }
+  });
+
+  it("walks Map field", () => {
+    const t = targets.find((t) => t.name === "WithMap")!;
+    expect(t.node.kind).toBe("object");
+    if (t.node.kind === "object") {
+      const scores = t.node.properties.find((p) => p.name === "scores")!;
+      expect(scores.type.kind).toBe("map");
+      if (scores.type.kind === "map") {
+        expect(scores.type.keyType.kind).toBe("string");
+        expect(scores.type.valueType.kind).toBe("number");
+      }
+    }
+  });
+
+  it("walks Set field", () => {
+    const t = targets.find((t) => t.name === "WithSet")!;
+    expect(t.node.kind).toBe("object");
+    if (t.node.kind === "object") {
+      const tags = t.node.properties.find((p) => p.name === "tags")!;
+      expect(tags.type.kind).toBe("set");
+      if (tags.type.kind === "set") {
+        expect(tags.type.elementType.kind).toBe("string");
+      }
+    }
+  });
+
+  it("walks Date | number union", () => {
+    const t = targets.find((t) => t.name === "DateOrNumber")!;
+    expect(t.node.kind).toBe("union");
+    if (t.node.kind === "union") {
+      const kinds = t.node.members.map((m) => m.kind).sort();
+      expect(kinds).toEqual(["date", "number"]);
+    }
+  });
+
   it("walks mixed named props + string index signature — collapses to pure indexSignature", () => {
     const mi = targets.find((t) => t.name === "MixedIndex")!;
     // String index sig absorbs all named string-keyed props,

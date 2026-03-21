@@ -123,3 +123,27 @@ export type ReadonlyPoint = Readonly<Point>;
 
 /** @hash */
 export type UserWithExtra = User & { id: string; extra: number };
+
+/** @hash */
+export interface WithDate {
+  created: Date;
+}
+
+/** @hash */
+export interface WithMap {
+  scores: Map<string, number>;
+}
+
+/** @hash */
+export interface WithSet {
+  tags: Set<string>;
+}
+
+/** @hash */
+export type DateOrNumber = Date | number;
+
+/** @hash */
+export type MapOrObject = Map<string, number> | { [key: string]: number };
+
+/** @hash */
+export type SetOrArray = Set<string> | string[];
