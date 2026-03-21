@@ -12,6 +12,9 @@ ts-hash = "dist/cli.js"
 [package.dependencies]
 typescript = "5.9.3"
 
+[package.devDependencies]
+vitest = "^4.1.0"
+
 [package.exports]
 "." = "./dist/index.js"
 
