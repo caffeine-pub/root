@@ -220,7 +220,8 @@ function emitTypeAnnotation(
         .filter((p) => !p.name.startsWith("["))
         .map((p) => {
           const opt = p.optional ? "?" : "";
-          return `${p.name}${opt}: ${emitTypeAnnotation(p.type, typeParamNames, refTypeParams)}`;
+          const propName = isValidIdentifier(p.name) ? p.name : JSON.stringify(p.name);
+          return `${propName}${opt}: ${emitTypeAnnotation(p.type, typeParamNames, refTypeParams)}`;
         });
       // Check for index signatures attached as pseudo-properties
       const indexProps = node.properties.filter((p) => p.name.startsWith("["));
@@ -527,12 +528,11 @@ function emitUnionHash(
   if (discriminant) {
     const { field, branches } = discriminant;
     let first = true;
+    const fieldAcc = isValidIdentifier(field) ? `.${field}` : `[${JSON.stringify(field)}]`;
     for (const [litValue, member] of branches) {
       const cond = typeof litValue === "string"
-        ? `${accessor}.${field} === ${JSON.stringify(litValue)}`
-        : typeof litValue === "boolean"
-          ? `${accessor}.${field} === ${litValue}`
-          : `${accessor}.${field} === ${litValue}`;
+        ? `${accessor}${fieldAcc} === ${JSON.stringify(litValue)}`
+        : `${accessor}${fieldAcc} === ${litValue}`;
 
       if (first) {
         lines.push(`${indent}if (${cond}) {`);
