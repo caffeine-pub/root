@@ -1,0 +1,13 @@
+[package]
+name = "ts-hash"
+version = "0.1.0"
+
+[package.scripts]
+start = "tsx src/index.ts"
+
+[package.dependencies]
+typescript = "5.9.3"
+
+[tsconfig.compilerOptions]
+outDir = "dist"
+rootDir = "src"
