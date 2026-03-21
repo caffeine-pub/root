@@ -375,7 +375,7 @@ function emitHashBody(
         lines.push(`${indent}const ${entryVar}s = [...${accessor}.entries()].map(([${kVar}, v]) => {`);
         lines.push(`${indent}  const h = new Hasher();`);
         emitHashBody(lines, node.keyType, kVar, indent + "  ", typeParamNames, depth + 1);
-        lines.push(`${indent}  return [h.digest(), v] as const;`);
+        lines.push(`${indent}  return [h.finish(), v] as const;`);
         lines.push(`${indent}});`);
         lines.push(`${indent}${entryVar}s.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);`);
         lines.push(`${indent}h.u32(${entryVar}s.length);`);
@@ -403,7 +403,7 @@ function emitHashBody(
         lines.push(`${indent}const _hashed${depth || ""} = [...${accessor}.values()].map((${rawVar}) => {`);
         lines.push(`${indent}  const h = new Hasher();`);
         emitHashBody(lines, node.elementType, rawVar, indent + "  ", typeParamNames, depth + 1);
-        lines.push(`${indent}  return h.digest();`);
+        lines.push(`${indent}  return h.finish();`);
         lines.push(`${indent}});`);
         lines.push(`${indent}_hashed${depth || ""}.sort();`);
         lines.push(`${indent}h.u32(_hashed${depth || ""}.length);`);

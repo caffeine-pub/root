@@ -625,7 +625,7 @@ describe("codegen", () => {
     const code = generateHashFile([t]);
     // Should shadow h inside the lambda for key hashing
     expect(code).toContain("const h = new Hasher()");
-    expect(code).toContain("h.digest()");
+    expect(code).toContain("h.finish()");
     expect(code).toContain("h.str(");
     expect(code).toMatchSnapshot();
   });
@@ -651,7 +651,7 @@ describe("codegen", () => {
     });
     const code = generateHashFile([t]);
     expect(code).toContain("const h = new Hasher()");
-    expect(code).toContain("h.digest()");
+    expect(code).toContain("h.finish()");
     expect(code).toMatchSnapshot();
   });
 

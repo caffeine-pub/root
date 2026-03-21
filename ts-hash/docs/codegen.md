@@ -292,7 +292,7 @@ const _entrys = [...value.data.entries()].map(([_k, v]) => {
   const h = new Hasher();  // shadows outer h
   h.f64(_k.x);
   h.f64(_k.y);
-  return [h.digest(), v] as const;
+  return [h.finish(), v] as const;
 });
 _entrys.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
 h.u32(_entrys.length);
@@ -326,7 +326,7 @@ h.u8(0xD2);
 const _hashed = [...value.items.values()].map((_raw) => {
   const h = new Hasher();
   h.f64(_raw.id);
-  return h.digest();
+  return h.finish();
 });
 _hashed.sort();
 h.u32(_hashed.length);
