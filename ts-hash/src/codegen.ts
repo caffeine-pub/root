@@ -360,23 +360,57 @@ function emitHashBody(
     case "map": {
       const entryVar = depth === 0 ? "_entry" : `_entry${depth}`;
       lines.push(`${indent}h.u8(0xD1);`); // tag: Map
-      lines.push(`${indent}const ${entryVar}s = [...${accessor}.entries()].sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);`);
-      lines.push(`${indent}h.u32(${entryVar}s.length);`);
-      lines.push(`${indent}for (const ${entryVar} of ${entryVar}s) {`);
-      emitHashBody(lines, node.keyType, `${entryVar}[0]`, indent + "  ", typeParamNames, depth + 1);
-      emitHashBody(lines, node.valueType, `${entryVar}[1]`, indent + "  ", typeParamNames, depth + 1);
-      lines.push(`${indent}}`);
+      if (isPrimitiveNode(node.keyType)) {
+        // Primitive keys: simple comparison
+        lines.push(`${indent}const ${entryVar}s = [...${accessor}.entries()].sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);`);
+        lines.push(`${indent}h.u32(${entryVar}s.length);`);
+        lines.push(`${indent}for (const ${entryVar} of ${entryVar}s) {`);
+        emitHashBody(lines, node.keyType, `${entryVar}[0]`, indent + "  ", typeParamNames, depth + 1);
+        emitHashBody(lines, node.valueType, `${entryVar}[1]`, indent + "  ", typeParamNames, depth + 1);
+        lines.push(`${indent}}`);
+      } else {
+        // Complex keys: hash each key once, sort by hash, feed hash + value into hasher
+        const pairVar = depth === 0 ? "_pair" : `_pair${depth}`;
+        const kVar = depth === 0 ? "_k" : `_k${depth}`;
+        lines.push(`${indent}const ${entryVar}s = [...${accessor}.entries()].map(([${kVar}, v]) => {`);
+        lines.push(`${indent}  const h = new Hasher();`);
+        emitHashBody(lines, node.keyType, kVar, indent + "  ", typeParamNames, depth + 1);
+        lines.push(`${indent}  return [h.digest(), v] as const;`);
+        lines.push(`${indent}});`);
+        lines.push(`${indent}${entryVar}s.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);`);
+        lines.push(`${indent}h.u32(${entryVar}s.length);`);
+        lines.push(`${indent}for (const ${pairVar} of ${entryVar}s) {`);
+        lines.push(`${indent}  h.str(${pairVar}[0]);`);
+        emitHashBody(lines, node.valueType, `${pairVar}[1]`, indent + "  ", typeParamNames, depth + 1);
+        lines.push(`${indent}}`);
+      }
       break;
     }
 
     case "set": {
       const elVar = depth === 0 ? "_el" : `_el${depth}`;
       lines.push(`${indent}h.u8(0xD2);`); // tag: Set
-      lines.push(`${indent}const _sorted${depth || ""} = [...${accessor}.values()].sort();`);
-      lines.push(`${indent}h.u32(_sorted${depth || ""}.length);`);
-      lines.push(`${indent}for (const ${elVar} of _sorted${depth || ""}) {`);
-      emitHashBody(lines, node.elementType, elVar, indent + "  ", typeParamNames, depth + 1);
-      lines.push(`${indent}}`);
+      if (isPrimitiveNode(node.elementType)) {
+        // Primitive elements: simple sort
+        lines.push(`${indent}const _sorted${depth || ""} = [...${accessor}.values()].sort();`);
+        lines.push(`${indent}h.u32(_sorted${depth || ""}.length);`);
+        lines.push(`${indent}for (const ${elVar} of _sorted${depth || ""}) {`);
+        emitHashBody(lines, node.elementType, elVar, indent + "  ", typeParamNames, depth + 1);
+        lines.push(`${indent}}`);
+      } else {
+        // Complex elements: hash each once, sort by hash, feed hashes into hasher
+        const rawVar = depth === 0 ? "_raw" : `_raw${depth}`;
+        lines.push(`${indent}const _hashed${depth || ""} = [...${accessor}.values()].map((${rawVar}) => {`);
+        lines.push(`${indent}  const h = new Hasher();`);
+        emitHashBody(lines, node.elementType, rawVar, indent + "  ", typeParamNames, depth + 1);
+        lines.push(`${indent}  return h.digest();`);
+        lines.push(`${indent}});`);
+        lines.push(`${indent}_hashed${depth || ""}.sort();`);
+        lines.push(`${indent}h.u32(_hashed${depth || ""}.length);`);
+        lines.push(`${indent}for (const ${elVar} of _hashed${depth || ""}) {`);
+        lines.push(`${indent}  h.str(${elVar});`);
+        lines.push(`${indent}}`);
+      }
       break;
     }
   }
@@ -587,6 +621,13 @@ function emitUnionHash(
  * Try to find a discriminant field in a union of object types.
  * Returns the field name and a map of literal value → member.
  */
+function isPrimitiveNode(node: TypeNode): boolean {
+  return node.kind === "string" || node.kind === "number"
+    || node.kind === "boolean" || node.kind === "bigint"
+    || node.kind === "stringLiteral" || node.kind === "numberLiteral"
+    || node.kind === "booleanLiteral";
+}
+
 const IDENT_RE = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
 function isValidIdentifier(name: string): boolean {
   return IDENT_RE.test(name);

@@ -601,6 +601,79 @@ describe("codegen", () => {
     expect(code).toMatchSnapshot();
   });
 
+  it("emits hash-based sorting for Map with complex keys", () => {
+    const t = target("ComplexMap", {
+      kind: "object",
+      properties: [
+        {
+          name: "data",
+          type: {
+            kind: "map",
+            keyType: {
+              kind: "object",
+              properties: [
+                { name: "x", type: { kind: "number" }, optional: false },
+                { name: "y", type: { kind: "number" }, optional: false },
+              ],
+            },
+            valueType: { kind: "string" },
+          },
+          optional: false,
+        },
+      ],
+    });
+    const code = generateHashFile([t]);
+    // Should shadow h inside the lambda for key hashing
+    expect(code).toContain("const h = new Hasher()");
+    expect(code).toContain("h.digest()");
+    expect(code).toContain("h.str(");
+    expect(code).toMatchSnapshot();
+  });
+
+  it("emits hash-based sorting for Set with complex elements", () => {
+    const t = target("ComplexSet", {
+      kind: "object",
+      properties: [
+        {
+          name: "items",
+          type: {
+            kind: "set",
+            elementType: {
+              kind: "object",
+              properties: [
+                { name: "id", type: { kind: "number" }, optional: false },
+              ],
+            },
+          },
+          optional: false,
+        },
+      ],
+    });
+    const code = generateHashFile([t]);
+    expect(code).toContain("const h = new Hasher()");
+    expect(code).toContain("h.digest()");
+    expect(code).toMatchSnapshot();
+  });
+
+  it("emits simple sort for Map with string keys", () => {
+    const t = target("SimpleMap", {
+      kind: "object",
+      properties: [
+        {
+          name: "m",
+          type: { kind: "map", keyType: { kind: "string" }, valueType: { kind: "number" } },
+          optional: false,
+        },
+      ],
+    });
+    const code = generateHashFile([t]);
+    // Should use simple < comparison, no Hasher shadowing inside a lambda
+    expect(code).toContain("a[0] < b[0]");
+    // Only one Hasher construction (the top-level one)
+    expect(code.match(/new Hasher\(\)/g)?.length).toBe(1);
+    expect(code).toMatchSnapshot();
+  });
+
   it("uses bracket notation for non-identifier property names", () => {
     const t = target("Headers", {
       kind: "object",
