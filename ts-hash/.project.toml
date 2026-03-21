@@ -4,9 +4,16 @@ version = "0.1.0"
 
 [package.scripts]
 start = "tsx src/index.ts"
+ts-hash = "tsx src/cli.ts"
+
+[package.bin]
+ts-hash = "dist/cli.js"
 
 [package.dependencies]
 typescript = "5.9.3"
+
+[package.exports]
+"." = "./dist/index.js"
 
 [tsconfig.compilerOptions]
 outDir = "dist"
