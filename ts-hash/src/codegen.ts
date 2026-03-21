@@ -190,6 +190,12 @@ function emitTypeAnnotation(
     case "booleanLiteral": return String(node.value);
     case "typeParameter": return node.name;
     case "ref": {
+      // Prefer instantiated type arguments from the walker (e.g. LinkedList<string>)
+      // over the declaration's parametric names (e.g. LinkedList<T>)
+      if (node.typeArguments?.length) {
+        const args = node.typeArguments.map((a) => emitTypeAnnotation(a, typeParamNames, refTypeParams));
+        return `${node.name}<${args.join(", ")}>`;
+      }
       const params = refTypeParams.get(node.name);
       return params ? `${node.name}<${params.join(", ")}>` : node.name;
     }

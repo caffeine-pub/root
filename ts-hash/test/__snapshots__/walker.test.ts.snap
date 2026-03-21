@@ -11,6 +11,7 @@ exports[`walker > handles recursive types 1`] = `
         "element": {
           "kind": "ref",
           "name": "Recursive",
+          "typeArguments": undefined,
         },
         "kind": "array",
       },
@@ -369,7 +370,14 @@ exports[`walker > walks generic recursive LinkedList 1`] = `
           },
           {
             "kind": "ref",
-            "name": "__type",
+            "name": "LinkedList",
+            "typeArguments": [
+              {
+                "constraint": null,
+                "kind": "typeParameter",
+                "name": "T",
+              },
+            ],
           },
         ],
       },

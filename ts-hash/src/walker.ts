@@ -25,7 +25,7 @@ export type TypeNode =
   | { kind: "date" }
   | { kind: "map"; keyType: TypeNode; valueType: TypeNode }
   | { kind: "set"; elementType: TypeNode }
-  | { kind: "ref"; name: string }; // reference to a named type (for recursion)
+  | { kind: "ref"; name: string; typeArguments?: TypeNode[] }; // reference to a named type (for recursion)
 
 export interface PropertyNode {
   name: string;
@@ -216,8 +216,19 @@ function walkType(
 
     // Recursion guard
     if (seen.has(typeId)) {
-      const symbol = type.getSymbol();
-      return { kind: "ref", name: symbol?.getName() ?? `<recursive:${typeId}>` };
+      // Prefer aliasSymbol (preserves the original type alias name even for
+      // instantiated generics like LinkedList<string>), fall back to the
+      // object type's own symbol (often __type for anonymous objects).
+      const name = type.aliasSymbol?.getName()
+        ?? type.getSymbol()?.getName()
+        ?? `<recursive:${typeId}>`;
+      // Extract instantiated type arguments (e.g. LinkedList<string> → [string])
+      // so codegen can emit the correct concrete type, not the parametric one.
+      const aliasArgs = type.aliasTypeArguments;
+      const typeArguments = aliasArgs?.length
+        ? aliasArgs.map((a) => walkType(checker, a, new Set(), cache))
+        : undefined;
+      return { kind: "ref", name, typeArguments };
     }
     seen.add(typeId);
 
