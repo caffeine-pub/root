@@ -201,7 +201,9 @@ function emitTypeAnnotation(
     case "tuple":
       return `[${node.elements.map((e) => {
         const t = emitTypeAnnotation(e.type, typeParamNames, refTypeParams);
-        return e.optional ? `${t}?` : t;
+        if (!e.optional) return t;
+        // Wrap in parens if the type contains | or & to avoid `string | number?` syntax error
+        return t.includes("|") || t.includes("&") ? `(${t})?` : `${t}?`;
       }).join(", ")}]`;
 
     case "union":
