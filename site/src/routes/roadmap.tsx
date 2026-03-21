@@ -40,6 +40,10 @@ interface AreaData {
 
 const changelog: ChangelogEntry[] = [
   {
+    badge: "closed",
+    text: "ts-hash (type-directed hashing)",
+  },
+  {
     badge: "moved",
     text: "ts-hash (type-directed hashing): planned -> in progress",
   },
@@ -84,29 +88,34 @@ const areas: AreaData[] = [
   },
   {
     name: "ts-hash (type-directed hashing)",
-    status: "active",
-    statusLabel: "in progress",
+    status: "solid",
+    statusLabel: "complete",
     desc: "A TypeScript static analysis for fast hashing of data structures",
     nodes: [
       {
-        status: "active",
+        status: "solid",
         name: "type extraction",
         note: "Walk interfaces, aliases, unions, intersections, generics, and produce a normalized type graph",
       },
       {
-        status: "planned",
+        status: "solid",
         name: "hash function codegen",
         note: "Generate specialized hash functions per type. Primitives inline, structs hash fields in declaration order, arrays stream elements",
       },
       {
-        status: "planned",
+        status: "solid",
         name: "recursive and circular types",
-        note: "Disallow these at compile time",
+        note: "Recursive types emit composable helpers with cycle-safe refs. Supports self-recursive and mutually recursive types",
       },
       {
-        status: "exploring",
+        status: "solid",
         name: "generics strategy",
-        note: "Code generation should be able to produce genericized function implementations",
+        note: "Generic types produce genericized hash functions with trait-style constraints. Instantiated refs resolve concrete type arguments",
+      },
+      {
+        status: "solid",
+        name: "CLI",
+        note: "Reads tsconfig, scans @hash types, writes hash.gen.ts, auto-adds path alias. 147 tests",
       },
       {
         status: "exploring",
