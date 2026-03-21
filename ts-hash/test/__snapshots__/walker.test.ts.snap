@@ -1,0 +1,598 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`walker > handles recursive types 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "children",
+      "optional": false,
+      "type": {
+        "element": {
+          "kind": "ref",
+          "name": "Recursive",
+        },
+        "kind": "array",
+      },
+    },
+    {
+      "name": "value",
+      "optional": false,
+      "type": {
+        "kind": "number",
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks Pick<User, 'name' | 'age'> (mapped type) 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "age",
+      "optional": false,
+      "type": {
+        "kind": "number",
+      },
+    },
+    {
+      "name": "name",
+      "optional": false,
+      "type": {
+        "kind": "string",
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks Point correctly 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "x",
+      "optional": false,
+      "type": {
+        "kind": "number",
+      },
+    },
+    {
+      "name": "y",
+      "optional": false,
+      "type": {
+        "kind": "number",
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks Readonly<Point> (mapped type) 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "x",
+      "optional": false,
+      "type": {
+        "kind": "number",
+      },
+    },
+    {
+      "name": "y",
+      "optional": false,
+      "type": {
+        "kind": "number",
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks Record<string, number> (mapped type) 1`] = `
+{
+  "keyType": "string",
+  "kind": "indexSignature",
+  "valueType": {
+    "kind": "number",
+  },
+}
+`;
+
+exports[`walker > walks User correctly 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "age",
+      "optional": false,
+      "type": {
+        "kind": "number",
+      },
+    },
+    {
+      "name": "email",
+      "optional": false,
+      "type": {
+        "kind": "string",
+      },
+    },
+    {
+      "name": "name",
+      "optional": false,
+      "type": {
+        "kind": "string",
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks arrays 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "counts",
+      "optional": false,
+      "type": {
+        "element": {
+          "kind": "number",
+        },
+        "kind": "array",
+      },
+    },
+    {
+      "name": "items",
+      "optional": false,
+      "type": {
+        "element": {
+          "kind": "string",
+        },
+        "kind": "array",
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks bigint 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "id",
+      "optional": false,
+      "type": {
+        "kind": "bigint",
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks boolean 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "flag",
+      "optional": false,
+      "type": {
+        "kind": "boolean",
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks constrained generic with hash constraint 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "hash",
+      "optional": false,
+      "type": {
+        "kind": "object",
+        "properties": [],
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks discriminated unions 1`] = `
+{
+  "kind": "union",
+  "members": [
+    {
+      "kind": "object",
+      "properties": [
+        {
+          "name": "kind",
+          "optional": false,
+          "type": {
+            "kind": "stringLiteral",
+            "value": "circle",
+          },
+        },
+        {
+          "name": "radius",
+          "optional": false,
+          "type": {
+            "kind": "number",
+          },
+        },
+      ],
+    },
+    {
+      "kind": "object",
+      "properties": [
+        {
+          "name": "height",
+          "optional": false,
+          "type": {
+            "kind": "number",
+          },
+        },
+        {
+          "name": "kind",
+          "optional": false,
+          "type": {
+            "kind": "stringLiteral",
+            "value": "rect",
+          },
+        },
+        {
+          "name": "width",
+          "optional": false,
+          "type": {
+            "kind": "number",
+          },
+        },
+      ],
+    },
+  ],
+}
+`;
+
+exports[`walker > walks generic Box<T> with one type param 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "value",
+      "optional": false,
+      "type": {
+        "constraint": null,
+        "kind": "typeParameter",
+        "name": "T",
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks generic Container<T> with array of T 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "items",
+      "optional": false,
+      "type": {
+        "element": {
+          "constraint": null,
+          "kind": "typeParameter",
+          "name": "T",
+        },
+        "kind": "array",
+      },
+    },
+    {
+      "name": "label",
+      "optional": false,
+      "type": {
+        "kind": "string",
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks generic Pair<A, B> with two type params 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "first",
+      "optional": false,
+      "type": {
+        "constraint": null,
+        "kind": "typeParameter",
+        "name": "A",
+      },
+    },
+    {
+      "name": "second",
+      "optional": false,
+      "type": {
+        "constraint": null,
+        "kind": "typeParameter",
+        "name": "B",
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks generic class GenericClass<T> 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "label",
+      "optional": false,
+      "type": {
+        "kind": "string",
+      },
+    },
+    {
+      "name": "value",
+      "optional": false,
+      "type": {
+        "constraint": null,
+        "kind": "typeParameter",
+        "name": "T",
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks generic type alias Result<T, E> 1`] = `
+{
+  "kind": "union",
+  "members": [
+    {
+      "kind": "object",
+      "properties": [
+        {
+          "name": "ok",
+          "optional": false,
+          "type": {
+            "kind": "booleanLiteral",
+            "value": true,
+          },
+        },
+        {
+          "name": "value",
+          "optional": false,
+          "type": {
+            "constraint": null,
+            "kind": "typeParameter",
+            "name": "T",
+          },
+        },
+      ],
+    },
+    {
+      "kind": "object",
+      "properties": [
+        {
+          "name": "error",
+          "optional": false,
+          "type": {
+            "constraint": null,
+            "kind": "typeParameter",
+            "name": "E",
+          },
+        },
+        {
+          "name": "ok",
+          "optional": false,
+          "type": {
+            "kind": "booleanLiteral",
+            "value": false,
+          },
+        },
+      ],
+    },
+  ],
+}
+`;
+
+exports[`walker > walks intersection with overlapping props — flattened, no duplicates 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "age",
+      "optional": false,
+      "type": {
+        "kind": "number",
+      },
+    },
+    {
+      "name": "email",
+      "optional": false,
+      "type": {
+        "kind": "string",
+      },
+    },
+    {
+      "name": "extra",
+      "optional": false,
+      "type": {
+        "kind": "number",
+      },
+    },
+    {
+      "name": "id",
+      "optional": false,
+      "type": {
+        "kind": "string",
+      },
+    },
+    {
+      "name": "name",
+      "optional": false,
+      "type": {
+        "kind": "string",
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks mixed named props + string index signature — collapses to pure indexSignature 1`] = `
+{
+  "keyType": "string",
+  "kind": "indexSignature",
+  "valueType": {
+    "kind": "union",
+    "members": [
+      {
+        "kind": "number",
+      },
+      {
+        "kind": "string",
+      },
+    ],
+  },
+}
+`;
+
+exports[`walker > walks nested types 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "label",
+      "optional": false,
+      "type": {
+        "kind": "string",
+      },
+    },
+    {
+      "name": "point",
+      "optional": false,
+      "type": {
+        "kind": "object",
+        "properties": [
+          {
+            "name": "x",
+            "optional": false,
+            "type": {
+              "kind": "number",
+            },
+          },
+          {
+            "name": "y",
+            "optional": false,
+            "type": {
+              "kind": "number",
+            },
+          },
+        ],
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks nullable types 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "value",
+      "optional": false,
+      "type": {
+        "kind": "union",
+        "members": [
+          {
+            "kind": "null",
+          },
+          {
+            "kind": "string",
+          },
+        ],
+      },
+    },
+  ],
+}
+`;
+
+exports[`walker > walks pure number index signature 1`] = `
+{
+  "keyType": "number",
+  "kind": "indexSignature",
+  "valueType": {
+    "kind": "string",
+  },
+}
+`;
+
+exports[`walker > walks pure string index signature 1`] = `
+{
+  "keyType": "string",
+  "kind": "indexSignature",
+  "valueType": {
+    "kind": "number",
+  },
+}
+`;
+
+exports[`walker > walks string literal union 1`] = `
+{
+  "kind": "union",
+  "members": [
+    {
+      "kind": "stringLiteral",
+      "value": "active",
+    },
+    {
+      "kind": "stringLiteral",
+      "value": "banned",
+    },
+    {
+      "kind": "stringLiteral",
+      "value": "inactive",
+    },
+  ],
+}
+`;
+
+exports[`walker > walks tuples 1`] = `
+{
+  "kind": "object",
+  "properties": [
+    {
+      "name": "pair",
+      "optional": false,
+      "type": {
+        "elements": [
+          {
+            "optional": false,
+            "type": {
+              "kind": "string",
+            },
+          },
+          {
+            "optional": false,
+            "type": {
+              "kind": "number",
+            },
+          },
+        ],
+        "kind": "tuple",
+      },
+    },
+  ],
+}
+`;
