@@ -406,6 +406,14 @@ Some type annotations reference names that need to exist in the generated file â
 type TreeNode = { children: TreeNode[]; value: number };
 ```
 
+Generic recursive types propagate their type parameters through ref nodes. A `refTypeParams` map (built from all targets at the start of codegen) tracks which type names carry which parameters, so `LinkedList<T>` emits:
+
+```ts
+type LinkedList<T> = { next: null | LinkedList<T>; value: T };
+```
+
+rather than the bare `LinkedList` without `<T>`, which wouldn't typecheck. The map is threaded through all `emitTypeAnnotation` calls so refs nested inside unions, arrays, tuples, etc. all get the correct generic arguments.
+
 The structural definition is self-contained and TypeScript handles recursive type aliases fine. The `ref` node in the annotation resolves to this local alias.
 
 **Enums** are represented as unions of their literal values in type annotations:
