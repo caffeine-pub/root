@@ -183,7 +183,28 @@ if (type.isNumberLiteral()) {
 }
 ```
 
-### 3g. Enum Types
+### 3g. Built-in Collection Types (Date, Map, Set)
+
+```ts
+// Detect by symbol name on the type
+const typeName = type.getSymbol()?.getName();
+
+if (typeName === "Date") {
+  // No type arguments needed — just hash getTime()
+}
+
+if (typeName === "Map" || typeName === "Set") {
+  // Extract type arguments for key/value/element types
+  const typeRef = type as ts.TypeReference;
+  const typeArgs = checker.getTypeArguments(typeRef);
+  // Map: typeArgs[0] = key type, typeArgs[1] = value type
+  // Set: typeArgs[0] = element type
+}
+```
+
+These are checked before the general object property walking. Without this, `Map<string, number>` would be decomposed into its full interface (with `get`, `set`, `forEach`, `size`, etc.) — not useful for hashing.
+
+### 3h. Enum Types
 
 ```ts
 // Get enum members

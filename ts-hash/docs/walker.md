@@ -71,9 +71,25 @@ Tuple elements preserve their declaration order (not sorted — position matters
 
 TypeScript represents `boolean` as `true | false` internally. The walker checks `TypeFlags.Boolean` before checking for unions, so `boolean` stays as a single `boolean` node rather than being decomposed.
 
+### Built-in Collection Types
+
+Three built-in types are recognized by symbol name and given dedicated node kinds:
+
+- `date` — no additional data. Represents `Date`.
+- `map` — carries `keyType: TypeNode` and `valueType: TypeNode`. Represents `Map<K, V>`.
+- `set` — carries `elementType: TypeNode`. Represents `Set<T>`.
+
+These are detected before the general object property walking, so `Map<string, number>` becomes `{ kind: "map", keyType: string, valueType: number }` rather than being decomposed into its interface properties (which would include `get`, `set`, `forEach`, etc. — not what you want to hash).
+
+Type arguments are extracted from the type reference. If a `Map` or `Set` has no explicit type arguments (shouldn't happen in practice for `@hash` types), the walker defaults to `string`.
+
 ### Intersections
 
 `intersection` — carries `members: TypeNode[]`, sorted the same way as unions.
+
+When all members of an intersection are object types, the walker flattens them into a single `object` node with deduplicated properties. Later properties win for overlaps — so `User & { id: string; extra: number }` where `User` already has `id: string` produces a single object node with `id` appearing once. This prevents fields from being hashed twice in the generated code.
+
+If any member is non-object (e.g., `string & Brand`), the intersection is preserved as-is with sorted members.
 
 ### Enums
 
@@ -182,5 +198,6 @@ Index signatures result in runtime key enumeration during hashing — `Object.ke
 - **Conditional types** (`T extends U ? A : B`) — would need evaluation.
 - **Function types** (`(x: number) => string`) — not hashable in the general case.
 - **`never`** — filtered out of unions by TypeScript before we see them, but not explicitly represented.
+- **Other built-in object types** — `RegExp`, `Error`, `Promise`, `WeakMap`, `WeakSet`, etc. are not given special treatment. They'd be walked as regular objects (exposing their interface methods), which isn't useful for hashing. Add dedicated node kinds as needed.
 
-These can be added if needed. The current coverage handles the common cases for data types you'd want to hash: records, arrays, tuples, unions, index signatures, and primitives.
+These can be added if needed. The current coverage handles the common cases for data types you'd want to hash: records, arrays, tuples, unions, intersections, index signatures, Date, Map, Set, enums, generics, and primitives.

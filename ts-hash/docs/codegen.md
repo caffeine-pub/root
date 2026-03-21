@@ -186,6 +186,22 @@ if (value.kind === "circle") {
 
 The `findDiscriminant` function looks for a property name that appears in every member and has a unique literal type in each. It checks `stringLiteral`, `numberLiteral`, and `booleanLiteral`. If multiple properties qualify, it takes the first one (which is the alphabetically first since properties are sorted).
 
+**instanceof splitting** — if the union contains `Date`, `Map`, or `Set` members alongside other types, `instanceof` checks are emitted first. These types all have `typeof "object"` so they can't be distinguished by typeof alone. The codegen also splits arrays/tuples from plain objects via `Array.isArray`. The priority within a union is: `instanceof Date` → `instanceof Map` → `instanceof Set` → `Array.isArray` → plain objects in an `else` branch.
+
+```ts
+if (value instanceof Date) {
+  h.u8(0xD0);
+  h.f64(value.getTime());
+} else if (Array.isArray(value)) {
+  h.u32(value.length);
+  for (const _el of value) { h.str(_el); }
+} else {
+  // plain object branch
+}
+```
+
+This handles unions like `Date | number`, `Map<string, number> | { [key: string]: number }`, and `Set<string> | string[]` correctly.
+
 **Typeof unions** — if every member can be distinguished by `typeof`, the codegen groups them and emits typeof checks:
 
 ```ts
@@ -196,7 +212,7 @@ if (typeof value === "number") {
 }
 ```
 
-The `typeofKind` function maps TypeNode kinds to typeof strings: `string`/`stringLiteral` → `"string"`, `number`/`numberLiteral` → `"number"`, `boolean`/`booleanLiteral` → `"boolean"`, `bigint` → `"bigint"`, `object`/`array`/`tuple` → `"object"`. If any member can't be mapped, or all members have the same typeof, this strategy is skipped.
+The `typeofKind` function maps TypeNode kinds to typeof strings: `string`/`stringLiteral` → `"string"`, `number`/`numberLiteral` → `"number"`, `boolean`/`booleanLiteral` → `"boolean"`, `bigint` → `"bigint"`, `object`/`array`/`tuple`/`date`/`map`/`set` → `"object"`. If any member can't be mapped, or all members have the same typeof, this strategy is skipped.
 
 If multiple members share a typeof (e.g. `string | "special" | number`), the codegen emits a nested `emitUnionHash` call for that typeof group, which will try the priority chain again on the subset.
 
@@ -240,6 +256,88 @@ The walker handles deduplication: named properties whose keys are assignable to 
 For number index signatures, only numeric-named properties get absorbed — string-named properties survive and are hashed via the static path as usual.
 
 Like arrays, nested index signatures use depth-suffixed variables: `_keys`, `_keys1`, `_k`, `_k1`, etc.
+
+### Date
+
+Tagged with `0xD0` to distinguish from raw numbers:
+
+```ts
+h.u8(0xD0);
+h.f64(value.created.getTime());
+```
+
+The tag ensures `new Date(1000)` doesn't collide with the number `1000`.
+
+### Map
+
+Tagged with `0xD1`. Entries are sorted for deterministic hashing. The sorting strategy depends on the key type:
+
+**Primitive keys** (string, number, boolean, bigint) — simple `<` comparison:
+
+```ts
+h.u8(0xD1);
+const _entrys = [...value.scores.entries()].sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+h.u32(_entrys.length);
+for (const _entry of _entrys) {
+  h.str(_entry[0]);
+  h.f64(_entry[1]);
+}
+```
+
+**Complex keys** (objects, arrays, etc.) — hash each key once, sort by digest, feed the digest into the hasher instead of re-hashing:
+
+```ts
+h.u8(0xD1);
+const _entrys = [...value.data.entries()].map(([_k, v]) => {
+  const h = new Hasher();  // shadows outer h
+  h.f64(_k.x);
+  h.f64(_k.y);
+  return [h.digest(), v] as const;
+});
+_entrys.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+h.u32(_entrys.length);
+for (const _pair of _entrys) {
+  h.str(_pair[0]);  // pre-computed key hash
+  h.str(_pair[1]);  // hash value normally
+}
+```
+
+The `const h = new Hasher()` inside the lambda shadows the outer `h`, so `emitHashBody` calls write to the fresh hasher. The key is hashed exactly once — its digest is used for both sorting and as the hash contribution.
+
+### Set
+
+Tagged with `0xD2`. Same sorting strategy as Map keys — primitive elements use `<`, complex elements hash-then-sort:
+
+**Primitive elements:**
+
+```ts
+h.u8(0xD2);
+const _sorted = [...value.tags.values()].sort();
+h.u32(_sorted.length);
+for (const _el of _sorted) {
+  h.str(_el);
+}
+```
+
+**Complex elements:**
+
+```ts
+h.u8(0xD2);
+const _hashed = [...value.items.values()].map((_raw) => {
+  const h = new Hasher();
+  h.f64(_raw.id);
+  return h.digest();
+});
+_hashed.sort();
+h.u32(_hashed.length);
+for (const _el of _hashed) {
+  h.str(_el);
+}
+```
+
+### Property access
+
+Object properties are accessed via dot notation when the property name is a valid JavaScript identifier (`value.name`), and bracket notation otherwise (`value["content-type"]`). This prevents syntax errors for property names containing hyphens, starting with digits, or matching reserved words.
 
 ### Enums
 
