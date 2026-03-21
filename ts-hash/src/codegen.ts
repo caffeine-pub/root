@@ -107,6 +107,9 @@ function collectRefs(node: TypeNode, refs: Set<string>): void {
   switch (node.kind) {
     case "ref":
       refs.add(node.name);
+      if (node.typeArguments) {
+        for (const arg of node.typeArguments) collectRefs(arg, refs);
+      }
       break;
     case "object":
       for (const prop of node.properties) collectRefs(prop.type, refs);
