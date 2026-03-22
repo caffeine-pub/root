@@ -131,7 +131,11 @@ function instantiate(
   function renewPossibleValues(pv: PossibleValues): PossibleValues {
     const newObjects = new Set<AbstractObject>();
     for (const obj of pv.objects) {
-      newObjects.add(obj.clone(lookup));
+      if (obj.level < instantiateAtLevel) {
+        newObjects.add(obj);
+      } else {
+        newObjects.add(obj.clone(lookup));
+      }
     }
     return new PossibleValues(newObjects, new Set(pv.functions));
   }

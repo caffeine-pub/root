@@ -12,7 +12,6 @@ import type {
 
 export function parse(tokens: Token[]): Program {
   let pos = 0;
-  let level = 0;
 
   function peek(): Token {
     return tokens[pos]!;
@@ -26,7 +25,7 @@ export function parse(tokens: Token[]): Program {
     const tok = peek();
     if (tok.kind !== kind) {
       throw new Error(
-        `${msg ?? `Expected ${TokenKind[kind]}`}, got ${TokenKind[tok.kind]} '${tok.value}' at ${tok.line}:${tok.col}`
+        `${msg ?? `Expected ${TokenKind[kind]}`}, got ${TokenKind[tok.kind]} '${tok.value}' at ${tok.line}:${tok.col}`,
       );
     }
     return advance();
@@ -48,7 +47,7 @@ export function parse(tokens: Token[]): Program {
     while (!at(TokenKind.EOF)) {
       body.push(parseStmt());
     }
-    return { body, level: 0 };
+    return { kind: "program", body };
   }
 
   function parseStmt(): Stmt {
@@ -101,7 +100,11 @@ export function parse(tokens: Token[]): Program {
   function parseReturnStmt(): Stmt {
     const tok = expect(TokenKind.Return);
     let value: Expr | null = null;
-    if (!at(TokenKind.Semicolon) && !at(TokenKind.RBrace) && !at(TokenKind.EOF)) {
+    if (
+      !at(TokenKind.Semicolon) &&
+      !at(TokenKind.RBrace) &&
+      !at(TokenKind.EOF)
+    ) {
       value = parseExpr();
     }
     eat(TokenKind.Semicolon);
@@ -161,7 +164,12 @@ export function parse(tokens: Token[]): Program {
     while (true) {
       if (eat(TokenKind.Dot)) {
         const prop = expect(TokenKind.Ident, "Expected property name").value;
-        expr = { kind: "member", object: expr, property: prop, line: expr.line };
+        expr = {
+          kind: "member",
+          object: expr,
+          property: prop,
+          line: expr.line,
+        };
       } else if (at(TokenKind.LParen)) {
         advance();
         const args: Expr[] = [];
@@ -177,7 +185,12 @@ export function parse(tokens: Token[]): Program {
         advance();
         const index = parseExpr();
         expect(TokenKind.RBracket);
-        expr = { kind: "member", object: expr, property: "??computed", line: expr.line };
+        expr = {
+          kind: "member",
+          object: expr,
+          property: "??computed",
+          line: expr.line,
+        };
       } else {
         break;
       }
@@ -223,23 +236,24 @@ export function parse(tokens: Token[]): Program {
     }
 
     throw new Error(
-      `Unexpected token ${TokenKind[tok.kind]} '${tok.value}' at ${tok.line}:${tok.col}`
+      `Unexpected token ${TokenKind[tok.kind]} '${tok.value}' at ${tok.line}:${tok.col}`,
     );
   }
 
   function parseArrow(params: string[], line: number): FunctionExpr {
     expect(TokenKind.Arrow);
-    level++;
     if (at(TokenKind.LBrace)) {
       const body = parseBlockBody();
-      const fn: FunctionExpr = { kind: "function", params, body, line, hash: `fn@${line}`, level };
-      level--;
-      return fn;
+      return { kind: "function", params, body, line, hash: `fn@${line}` };
     }
     const expr = parseAssign();
-    const fn: FunctionExpr = { kind: "function", params, body: [{ kind: "return", value: expr, line: expr.line }], line, hash: `fn@${line}`, level };
-    level--;
-    return fn;
+    return {
+      kind: "function",
+      params,
+      body: [{ kind: "return", value: expr, line: expr.line }],
+      line,
+      hash: `fn@${line}`,
+    };
   }
 
   function parseObjectLit(): ObjectLit {
@@ -255,7 +269,12 @@ export function parse(tokens: Token[]): Program {
     }
 
     expect(TokenKind.RBrace);
-    return { kind: "object", properties, line: tok.line, hash: `obj@${tok.line}` };
+    return {
+      kind: "object",
+      properties,
+      line: tok.line,
+      hash: `obj@${tok.line}`,
+    };
   }
 
   function parseProperty(): { key: string; value: Expr } {
@@ -270,7 +289,11 @@ export function parse(tokens: Token[]): Program {
 
   function isArrowParams(): boolean {
     let j = pos + 1;
-    if (tokens[j]?.kind === TokenKind.RParen && tokens[j + 1]?.kind === TokenKind.Arrow) return true;
+    if (
+      tokens[j]?.kind === TokenKind.RParen &&
+      tokens[j + 1]?.kind === TokenKind.Arrow
+    )
+      return true;
     while (j < tokens.length) {
       if (tokens[j]?.kind !== TokenKind.Ident) return false;
       j++;

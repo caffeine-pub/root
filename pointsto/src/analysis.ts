@@ -18,12 +18,16 @@ import {
   solve,
   SubsetConstraint,
 } from "./kleene.js";
+import { buildPlaces, PlaceMap } from "./places.js";
 
 const todo = (): never => {
   throw new Error("todo");
 };
 
 export function analyze(program: Program): Map<Place, PossibleValues> {
+  // run IR
+  const placeMap = buildPlaces(program);
+
   const callgraph = new CallGraph();
   let solution: Map<Place, PossibleValues> = new Map();
 
@@ -32,13 +36,13 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
     callgraph.clearDirty();
 
     for (const scc of sccs) {
-      const iteration = new Iteration(scc, solution);
+      const iteration = new Iteration(placeMap, scc, solution);
       const constraints = iteration.run();
       solution = solve(constraints).state;
 
       // add to callgraph
       for (const fn of scc) {
-        const callees = iteration.callees.get(fn);
+        const callees = placeMap.calleeResolution.get(fn);
         if (!callees) continue;
         for (const callee of callees) {
           if (callee instanceof Place) {
@@ -64,57 +68,19 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
   return solution;
 }
 
-class Scope {
-  private stack: { name: string; value: Place }[] = [];
-
-  declare(name: string, value: Place) {
-    this.stack.push({ name, value });
-  }
-
-  lookup(name: string) {
-    return this.stack.findLast((v) => v.name === name)?.value;
-  }
-
-  push() {
-    return this.stack.length;
-  }
-
-  reset(mark: number) {
-    this.stack = this.stack.slice(0, mark);
-  }
-}
-
 class Iteration {
   private constraints: Constraint[] = [];
-  private scope = new Scope();
-
   private currentFunction!: FunctionNode;
-  get level() {
-    return this.currentFunction.level;
-  }
 
   private returnVar: Map<FunctionNode, Place> = new Map();
-  public callees: Map<FunctionNode, Set<Place | FunctionExpr>> = new Map();
 
   constructor(
+    private placeMap: PlaceMap,
     private functions: FunctionNode[],
     private solution: Map<Place, PossibleValues> = new Map(),
   ) {}
 
-  addCallee(place: Place | FunctionExpr) {
-    const exists = this.callees.get(this.currentFunction);
-    if (exists) {
-      exists.add(place);
-    } else {
-      this.callees.set(this.currentFunction, new Set([place]));
-    }
-  }
-
   run() {
-    for (const fn of this.functions) {
-      this.returnVar.set(fn, new Place(`return [TODO add detail]`, fn.level));
-    }
-
     for (const fn of this.functions) {
       this.currentFunction = fn;
       for (const stmt of fn.body) {
@@ -131,8 +97,7 @@ class Iteration {
         this.expr(stmt.expr);
         break;
       case "let": {
-        const lhs = new Place(stmt.name, this.level);
-        this.scope.declare(stmt.name, lhs);
+        const lhs = this.placeMap.variables.get(stmt)!;
         if (stmt.init) {
           const rhs = this.expr(stmt.init);
           if (rhs) this.constraints.push(new SubsetConstraint(lhs, rhs));
@@ -154,23 +119,22 @@ class Iteration {
     }
   }
 
-  // TODO: add PossibleValues to return type
   expr(expr: Expr): Place | PossibleValues | null {
     switch (expr.kind) {
-      case "ident": {
-        const fromVariable = this.scope.lookup(expr.name);
-        // TODO: check if this place resolves to a function we're currently analyzing... somehow
-        if (fromVariable) return fromVariable;
-        else
-          throw new Error(
-            `no variable ${expr.name} found at line ${expr.line}`,
-          );
+      case "ident":
+      case "function": {
+        return this.placeMap.exprResolution.get(expr)!;
       }
       case "number":
       case "null":
         return null;
       case "object": {
-        const object = new AbstractObject(expr.hash, this.level);
+        const result = this.placeMap.exprResolution.get(expr)!;
+
+        // this is why you have an IR but we'll make do for this prototype
+        const object = (result as PossibleValues).objects
+          .values()
+          .next().value!;
 
         for (const prop of expr.properties) {
           const fieldVar = object.field(prop.key);
@@ -181,32 +145,18 @@ class Iteration {
         // theoretically we could optimize this at all depths
         // because currently the fields have their own places
         // but we'll just leave it at depth one
-        return new PossibleValues(new Set([object]));
-      }
-      case "function": {
-        return new PossibleValues(new Set(), new Set([expr]));
+        return result;
       }
       case "call": {
+        const place = this.placeMap.exprResolution.get(expr)! as Place;
         const callee = this.expr(expr.callee);
-        if (callee) {
-          if (callee instanceof Place) {
-            this.addCallee(callee);
-          } else {
-            for (const fn of callee.functions) {
-              this.addCallee(fn);
-            }
-          }
-        } else console.warn(`call at line ${expr.line} is probably not valid`);
 
         // TODO: instantiate and process returns if previous solution found
 
-        return new Place(`call@${expr.line}`, this.level);
+        return place;
       }
       case "member": {
-        const place = new Place(
-          `member@${expr.line} .${expr.property}`,
-          this.level,
-        );
+        const place = this.placeMap.exprResolution.get(expr)! as Place;
         const object = this.expr(expr.object);
 
         if (object) {
@@ -238,13 +188,10 @@ class Iteration {
         const value = this.expr(expr.value);
         if (!value) return value;
         if (expr.target.kind === "ident") {
-          const toVariable = this.scope.lookup(expr.target.name);
-          if (toVariable) {
-            this.constraints.push(new SubsetConstraint(toVariable, value));
-          } else
-            throw new Error(
-              `no variable ${expr.target.name} found at line ${expr.line}`,
-            );
+          const toVariable = this.placeMap.exprResolution.get(
+            expr.target,
+          )! as Place;
+          this.constraints.push(new SubsetConstraint(toVariable, value));
         } else if (expr.target.kind === "member") {
           const base = this.expr(expr.target.object);
           if (base) {
@@ -253,6 +200,8 @@ class Iteration {
                 new FieldStoreConstraint(base, expr.target.property, value),
               );
             } else {
+              // we might as well
+              // { foo: 1 }.foo = 2;
               for (const baseFieldPlace of base.field(expr.target.property)) {
                 this.constraints.push(
                   new SubsetConstraint(baseFieldPlace, value),
