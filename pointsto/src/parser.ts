@@ -12,6 +12,7 @@ import type {
 
 export function parse(tokens: Token[]): Program {
   let pos = 0;
+  let level = 0;
 
   function peek(): Token {
     return tokens[pos]!;
@@ -47,7 +48,7 @@ export function parse(tokens: Token[]): Program {
     while (!at(TokenKind.EOF)) {
       body.push(parseStmt());
     }
-    return { body };
+    return { body, level: 0 };
   }
 
   function parseStmt(): Stmt {
@@ -228,12 +229,17 @@ export function parse(tokens: Token[]): Program {
 
   function parseArrow(params: string[], line: number): FunctionExpr {
     expect(TokenKind.Arrow);
+    level++;
     if (at(TokenKind.LBrace)) {
       const body = parseBlockBody();
-      return { kind: "function", params, body, line, hash: `fn@${line}` };
+      const fn: FunctionExpr = { kind: "function", params, body, line, hash: `fn@${line}`, level };
+      level--;
+      return fn;
     }
     const expr = parseAssign();
-    return { kind: "function", params, body: [{ kind: "return", value: expr, line: expr.line }], line, hash: `fn@${line}` };
+    const fn: FunctionExpr = { kind: "function", params, body: [{ kind: "return", value: expr, line: expr.line }], line, hash: `fn@${line}`, level };
+    level--;
+    return fn;
   }
 
   function parseObjectLit(): ObjectLit {

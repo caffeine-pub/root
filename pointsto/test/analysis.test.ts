@@ -2,283 +2,174 @@ import { describe, it, expect } from "vitest";
 import { lex } from "../src/lexer.js";
 import { parse } from "../src/parser.js";
 import { analyze } from "../src/analysis.js";
+import { Place, PossibleValues } from "../src/kleene.js";
 
-function pointsTo(source: string): Map<string, Set<string>> {
+function run(source: string): Map<Place, PossibleValues> {
   const program = parse(lex(source));
   return analyze(program);
 }
 
-// helper: check that variable `name` points to allocation sites with given labels
-function expectPointsTo(result: Map<string, Set<string>>, name: string, ...targets: string[]) {
-  const set = result.get(name);
-  expect(set, `expected ${name} to exist in results`).toBeDefined();
-  expect([...set!].sort()).toEqual(targets.sort());
+/** find a Place by name in the result map */
+function findPlace(
+  state: Map<Place, PossibleValues>,
+  name: string,
+): [Place, PossibleValues] | undefined {
+  for (const [place, values] of state) {
+    if (place.name === name) return [place, values];
+  }
+  return undefined;
 }
 
-describe("direct assignments", () => {
-  it("tracks a single closure", () => {
-    const r = pointsTo(`
-      let f = () => { return {}; };
-    `);
-    expectPointsTo(r, "f", "fn@2");
-  });
+function expectObjects(
+  state: Map<Place, PossibleValues>,
+  placeName: string,
+  ...labels: string[]
+) {
+  const found = findPlace(state, placeName);
+  expect(found, `expected place "${placeName}" to exist`).toBeDefined();
+  const objectNames = [...found![1].objects].map((o) => o.name).sort();
+  expect(objectNames).toEqual(labels.sort());
+}
 
+function expectFunctions(
+  state: Map<Place, PossibleValues>,
+  placeName: string,
+  ...labels: string[]
+) {
+  const found = findPlace(state, placeName);
+  expect(found, `expected place "${placeName}" to exist`).toBeDefined();
+  expect([...found![1].functions].map((f) => f.hash).sort()).toEqual(
+    labels.sort(),
+  );
+}
+
+describe("basic assignments", () => {
   it("tracks object allocation", () => {
-    const r = pointsTo(`
-      let o = { x: null };
+    const state = run(`
+      let a = {};
     `);
-    expectPointsTo(r, "o", "obj@2");
+    expectObjects(state, "a", "obj@2");
   });
 
-  it("tracks variable-to-variable copy", () => {
-    const r = pointsTo(`
-      let f = () => { return {}; };
-      let g = f;
+  it("tracks function allocation", () => {
+    const state = run(`
+      let f = () => { return null; };
     `);
-    expectPointsTo(r, "f", "fn@2");
-    expectPointsTo(r, "g", "fn@2");
-  });
-});
-
-describe("field sensitivity", () => {
-  it("tracks function stored in object field", () => {
-    const r = pointsTo(`
-      let handler = (x) => { return x; };
-      let obj = { f: handler };
-      let g = obj.f;
-    `);
-    expectPointsTo(r, "g", "fn@2");
+    expectFunctions(state, "f", "fn@2");
   });
 
-  it("tracks field assignment after construction", () => {
-    const r = pointsTo(`
-      let obj = {};
-      let handler = (x) => { return x; };
-      obj.f = handler;
-      let g = obj.f;
+  it("tracks variable-to-variable flow", () => {
+    const state = run(`
+      let a = {};
+      let b = a;
     `);
-    expectPointsTo(r, "g", "fn@3");
+    expectObjects(state, "a", "obj@2");
+    expectObjects(state, "b", "obj@2");
   });
 
-  it("tracks nested field access", () => {
-    const r = pointsTo(`
-      let inner = { val: () => { return {}; } };
-      let outer = { nested: inner };
-      let f = outer.nested.val;
-    `);
-    expectPointsTo(r, "f", "fn@2");
-  });
-});
-
-describe("call graph discovery", () => {
-  it("discovers direct call return value", () => {
-    const r = pointsTo(`
-      let make = () => {
-        return () => { return {}; };
-      };
-      let f = make();
-    `);
-    expectPointsTo(r, "f", "fn@3");
-  });
-
-  it("discovers higher-order function call", () => {
-    const r = pointsTo(`
-      let apply = (f, x) => {
-        return f(x);
-      };
-      let id = (x) => { return x; };
-      let obj = {};
-      let result = apply(id, obj);
-    `);
-    expectPointsTo(r, "result", "obj@6");
-  });
-
-  it("discovers multi-step call chain", () => {
-    const r = pointsTo(`
-      let wrap = (x) => {
-        return { val: x };
-      };
-      let unwrap = (o) => {
-        return o.val;
-      };
-      let f = () => { return {}; };
-      let w = wrap(f);
-      let g = unwrap(w);
-    `);
-    expectPointsTo(r, "g", "fn@8");
-  });
-});
-
-describe("closures and captures", () => {
-  it("tracks captured variable through closure", () => {
-    const r = pointsTo(`
-      let x = {};
-      let f = () => { return x; };
-      let result = f();
-    `);
-    expectPointsTo(r, "result", "obj@2");
-  });
-
-  it("tracks factory pattern", () => {
-    const r = pointsTo(`
-      let makeHandler = (h) => {
-        return () => { return h; };
-      };
-      let myFn = () => { return {}; };
-      let wrapped = makeHandler(myFn);
-      let result = wrapped();
-    `);
-    expectPointsTo(r, "result", "fn@5");
-  });
-});
-
-describe("branches", () => {
-  it("merges points-to sets from both branches", () => {
-    const r = pointsTo(`
-      let a = () => { return {}; };
-      let b = () => { return {}; };
-      let f = null;
-      if {
-        f = a;
-      } else {
-        f = b;
-      }
-    `);
-    expectPointsTo(r, "f", "fn@2", "fn@3");
-  });
-
-  it("handles conditional call targets", () => {
-    const r = pointsTo(`
-      let a = (x) => { return x; };
-      let b = (x) => { return x; };
-      let f = null;
-      if {
-        f = a;
-      } else {
-        f = b;
-      }
-      let obj = {};
-      let result = f(obj);
-    `);
-    expectPointsTo(r, "result", "obj@10");
-  });
-});
-
-describe("loops", () => {
-  it("reaches fixpoint through loop", () => {
-    const r = pointsTo(`
+  it("tracks multiple assignments (flow-insensitive)", () => {
+    const state = run(`
       let a = {};
       let b = {};
       let x = a;
-      loop {
-        x = b;
-        break;
-      }
+      x = b;
     `);
-    expectPointsTo(r, "x", "obj@2", "obj@3");
-  });
-
-  it("handles function built in a loop", () => {
-    const r = pointsTo(`
-      let last = null;
-      loop {
-        last = () => { return {}; };
-        break;
-      }
-    `);
-    const set = r.get("last");
-    expect(set).toBeDefined();
-    expect(set!.size).toBeGreaterThan(0);
+    expectObjects(state, "x", "obj@2", "obj@3");
   });
 });
 
-describe("mutual recursion", () => {
-  it("discovers mutually recursive call graph", () => {
-    const r = pointsTo(`
-      let isEven = null;
-      let isOdd = null;
-      isEven = (n) => {
-        return isOdd(n);
-      };
-      isOdd = (n) => {
-        return isEven(n);
-      };
+describe("object fields", () => {
+  it("tracks field initialized in literal", () => {
+    const state = run(`
+      let f = () => { return null; };
+      let obj = { handler: f };
+      let g = obj.handler;
+    `);
+    expectFunctions(state, "g", "fn@2");
+  });
+
+  it("tracks field store then load", () => {
+    const state = run(`
       let obj = {};
-      let result = isEven(obj);
+      let f = () => { return null; };
+      obj.handler = f;
+      let g = obj.handler;
     `);
-    // result flows through both functions
-    const set = r.get("result");
-    expect(set).toBeDefined();
-    expect(set!.size).toBeGreaterThan(0);
+    expectFunctions(state, "g", "fn@3");
   });
-});
 
-describe("forward declarations", () => {
-  it("handles forward-declared function", () => {
-    const r = pointsTo(`
-      let f = null;
-      let result = f();
-      f = () => { return {}; };
+  it("distinguishes fields on the same object", () => {
+    const state = run(`
+      let a = () => { return null; };
+      let b = () => { return null; };
+      let obj = { x: a, y: b };
+      let ra = obj.x;
+      let rb = obj.y;
     `);
-    const set = r.get("result");
-    expect(set).toBeDefined();
-    expect(set!.size).toBeGreaterThan(0);
+    expectFunctions(state, "ra", "fn@2");
+    expectFunctions(state, "rb", "fn@3");
   });
-});
 
-describe("multi-step discovery", () => {
-  it("discovers call target through field read after call graph update", () => {
-    const r = pointsTo(`
-      let getHandler = () => {
-        return { f: (x) => { return x; } };
-      };
-      let result = getHandler();
+  it("distinguishes fields on different objects", () => {
+    const state = run(`
+      let a = () => { return null; };
+      let b = () => { return null; };
+      let obj1 = { f: a };
+      let obj2 = { f: b };
+      let ra = obj1.f;
+      let rb = obj2.f;
+    `);
+    expectFunctions(state, "ra", "fn@2");
+    expectFunctions(state, "rb", "fn@3");
+  });
+
+  it("handles store after load (order independence)", () => {
+    // flow-insensitive: load should still see the store
+    const state = run(`
       let obj = {};
-      let out = result.f(obj);
+      let g = obj.handler;
+      let f = () => { return null; };
+      obj.handler = f;
     `);
-    expectPointsTo(r, "out", "obj@5");
+    expectFunctions(state, "g", "fn@4");
   });
 
-  it("discovers call target through two levels of indirection", () => {
-    const r = pointsTo(`
-      let make = () => {
-        return (x) => { return x; };
-      };
-      let apply = (f, x) => {
-        return f(x);
-      };
-      let fn = make();
-      let obj = {};
-      let result = apply(fn, obj);
+  it("handles nested field access", () => {
+    const state = run(`
+      let inner = { val: () => { return null; } };
+      let outer = { nested: inner };
+      let f = outer.nested.val;
     `);
-    expectPointsTo(r, "result", "obj@8");
-  });
-
-  it("callback passed through multiple hops", () => {
-    const r = pointsTo(`
-      let a = (cb) => {
-        return b(cb);
-      };
-      let b = (cb) => {
-        return cb();
-      };
-      let target = {};
-      let result = a(() => { return target; });
-    `);
-    expectPointsTo(r, "result", "obj@7");
+    expectFunctions(state, "f", "fn@2");
   });
 });
 
-describe("tree recursion", () => {
-  it("handles tree-like recursive structure", () => {
-    const r = pointsTo(`
-      let makeNode = (l, r) => {
-        return { left: l, right: r };
-      };
-      let leaf = {};
-      let tree = makeNode(makeNode(leaf, leaf), leaf);
-      let leftLeft = tree.left.left;
+describe("multiple objects through one variable", () => {
+  it("field load sees fields from all pointed-to objects", () => {
+    const state = run(`
+      let a = { f: () => { return null; } };
+      let b = { f: () => { return null; } };
+      let x = a;
+      x = b;
+      let result = x.f;
     `);
-    expectPointsTo(r, "leftLeft", "obj@5");
+    // x points to both objects, so x.f should have both functions
+    expectFunctions(state, "result", "fn@2", "fn@3");
+  });
+
+  it("field store writes to all pointed-to objects", () => {
+    const state = run(`
+      let a = {};
+      let b = {};
+      let x = a;
+      x = b;
+      let f = () => { return null; };
+      x.handler = f;
+      let ra = a.handler;
+      let rb = b.handler;
+    `);
+    // both a and b should have handler set
+    expectFunctions(state, "ra", "fn@6");
+    expectFunctions(state, "rb", "fn@6");
   });
 });

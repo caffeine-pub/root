@@ -40,6 +40,7 @@ export interface FunctionExpr {
   body: Stmt[];
   line: number;
   hash: string;
+  level: number;
 }
 
 export interface CallExpr {
@@ -117,4 +118,5 @@ export interface BlockStmt {
 
 export interface Program {
   body: Stmt[];
+  level: number;
 }
