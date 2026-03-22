@@ -3,15 +3,11 @@
 export type Expr =
   | IdentExpr
   | NumberLit
-  | StringLit
-  | BoolLit
   | NullLit
   | ObjectLit
   | FunctionExpr
   | CallExpr
   | MemberExpr
-  | BinaryExpr
-  | UnaryExpr
   | AssignExpr;
 
 export interface IdentExpr {
@@ -26,18 +22,6 @@ export interface NumberLit {
   line: number;
 }
 
-export interface StringLit {
-  kind: "string";
-  value: string;
-  line: number;
-}
-
-export interface BoolLit {
-  kind: "bool";
-  value: boolean;
-  line: number;
-}
-
 export interface NullLit {
   kind: "null";
   line: number;
@@ -47,6 +31,7 @@ export interface ObjectLit {
   kind: "object";
   properties: { key: string; value: Expr }[];
   line: number;
+  hash: string;
 }
 
 export interface FunctionExpr {
@@ -54,6 +39,7 @@ export interface FunctionExpr {
   params: string[];
   body: Stmt[];
   line: number;
+  hash: string;
 }
 
 export interface CallExpr {
@@ -67,21 +53,6 @@ export interface MemberExpr {
   kind: "member";
   object: Expr;
   property: string;
-  line: number;
-}
-
-export interface BinaryExpr {
-  kind: "binary";
-  op: string;
-  left: Expr;
-  right: Expr;
-  line: number;
-}
-
-export interface UnaryExpr {
-  kind: "unary";
-  op: string;
-  operand: Expr;
   line: number;
 }
 
@@ -117,7 +88,6 @@ export interface LetStmt {
 
 export interface IfStmt {
   kind: "if";
-  condition: Expr;
   then: Stmt[];
   else_: Stmt[] | null;
   line: number;

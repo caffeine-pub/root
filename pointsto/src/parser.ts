@@ -73,9 +73,6 @@ export function parse(tokens: Token[]): Program {
 
   function parseIfStmt(): Stmt {
     const tok = expect(TokenKind.If);
-    expect(TokenKind.LParen);
-    const condition = parseExpr();
-    expect(TokenKind.RParen);
     const then = parseBlockBody();
     let else_: Stmt[] | null = null;
     if (eat(TokenKind.Else)) {
@@ -85,7 +82,7 @@ export function parse(tokens: Token[]): Program {
         else_ = parseBlockBody();
       }
     }
-    return { kind: "if", condition, then, else_, line: tok.line };
+    return { kind: "if", then, else_, line: tok.line };
   }
 
   function parseLoopStmt(): Stmt {
@@ -138,7 +135,7 @@ export function parse(tokens: Token[]): Program {
   }
 
   function parseAssign(): Expr {
-    const left = parseOr();
+    const left = parsePostfix();
 
     if (at(TokenKind.Eq)) {
       advance();
@@ -155,73 +152,6 @@ export function parse(tokens: Token[]): Program {
     }
 
     return left;
-  }
-
-  function parseOr(): Expr {
-    let left = parseAnd();
-    while (eat(TokenKind.Or)) {
-      const right = parseAnd();
-      left = { kind: "binary", op: "||", left, right, line: left.line };
-    }
-    return left;
-  }
-
-  function parseAnd(): Expr {
-    let left = parseEquality();
-    while (eat(TokenKind.And)) {
-      const right = parseEquality();
-      left = { kind: "binary", op: "&&", left, right, line: left.line };
-    }
-    return left;
-  }
-
-  function parseEquality(): Expr {
-    let left = parseComparison();
-    while (at(TokenKind.EqEq) || at(TokenKind.BangEq)) {
-      const op = advance().value;
-      const right = parseComparison();
-      left = { kind: "binary", op, left, right, line: left.line };
-    }
-    return left;
-  }
-
-  function parseComparison(): Expr {
-    let left = parseAdditive();
-    while (at(TokenKind.Lt) || at(TokenKind.Gt) || at(TokenKind.LtEq) || at(TokenKind.GtEq)) {
-      const op = advance().value;
-      const right = parseAdditive();
-      left = { kind: "binary", op, left, right, line: left.line };
-    }
-    return left;
-  }
-
-  function parseAdditive(): Expr {
-    let left = parseMultiplicative();
-    while (at(TokenKind.Plus) || at(TokenKind.Minus)) {
-      const op = advance().value;
-      const right = parseMultiplicative();
-      left = { kind: "binary", op, left, right, line: left.line };
-    }
-    return left;
-  }
-
-  function parseMultiplicative(): Expr {
-    let left = parseUnary();
-    while (at(TokenKind.Star) || at(TokenKind.Slash)) {
-      const op = advance().value;
-      const right = parseUnary();
-      left = { kind: "binary", op, left, right, line: left.line };
-    }
-    return left;
-  }
-
-  function parseUnary(): Expr {
-    if (at(TokenKind.Bang) || at(TokenKind.Minus)) {
-      const tok = advance();
-      const operand = parseUnary();
-      return { kind: "unary", op: tok.value, operand, line: tok.line };
-    }
-    return parsePostfix();
   }
 
   function parsePostfix(): Expr {
@@ -246,13 +176,7 @@ export function parse(tokens: Token[]): Program {
         advance();
         const index = parseExpr();
         expect(TokenKind.RBracket);
-        // Desugar computed access to member if string literal
-        if (index.kind === "string") {
-          expr = { kind: "member", object: expr, property: index.value, line: expr.line };
-        } else {
-          // For the analysis we'll treat computed access as opaque for now
-          expr = { kind: "member", object: expr, property: "??computed", line: expr.line };
-        }
+        expr = { kind: "member", object: expr, property: "??computed", line: expr.line };
       } else {
         break;
       }
@@ -269,21 +193,6 @@ export function parse(tokens: Token[]): Program {
       return { kind: "number", value: parseFloat(tok.value), line: tok.line };
     }
 
-    if (at(TokenKind.String)) {
-      advance();
-      return { kind: "string", value: tok.value, line: tok.line };
-    }
-
-    if (at(TokenKind.True)) {
-      advance();
-      return { kind: "bool", value: true, line: tok.line };
-    }
-
-    if (at(TokenKind.False)) {
-      advance();
-      return { kind: "bool", value: false, line: tok.line };
-    }
-
     if (at(TokenKind.Null)) {
       advance();
       return { kind: "null", line: tok.line };
@@ -291,7 +200,6 @@ export function parse(tokens: Token[]): Program {
 
     if (at(TokenKind.Ident)) {
       advance();
-      // single param arrow: x => ...
       if (at(TokenKind.Arrow)) {
         return parseArrow([tok.value], tok.line);
       }
@@ -303,7 +211,6 @@ export function parse(tokens: Token[]): Program {
     }
 
     if (at(TokenKind.LParen)) {
-      // could be arrow params or grouped expr — look ahead
       if (isArrowParams()) {
         const params = parseParams();
         return parseArrow(params, tok.line);
@@ -323,11 +230,10 @@ export function parse(tokens: Token[]): Program {
     expect(TokenKind.Arrow);
     if (at(TokenKind.LBrace)) {
       const body = parseBlockBody();
-      return { kind: "function", params, body, line };
+      return { kind: "function", params, body, line, hash: `fn@${line}` };
     }
-    // expression body: x => x + 1 becomes x => { return x + 1; }
     const expr = parseAssign();
-    return { kind: "function", params, body: [{ kind: "return", value: expr, line: expr.line }], line };
+    return { kind: "function", params, body: [{ kind: "return", value: expr, line: expr.line }], line, hash: `fn@${line}` };
   }
 
   function parseObjectLit(): ObjectLit {
@@ -337,18 +243,17 @@ export function parse(tokens: Token[]): Program {
     if (!at(TokenKind.RBrace)) {
       properties.push(parseProperty());
       while (eat(TokenKind.Comma)) {
-        if (at(TokenKind.RBrace)) break; // trailing comma
+        if (at(TokenKind.RBrace)) break;
         properties.push(parseProperty());
       }
     }
 
     expect(TokenKind.RBrace);
-    return { kind: "object", properties, line: tok.line };
+    return { kind: "object", properties, line: tok.line, hash: `obj@${tok.line}` };
   }
 
   function parseProperty(): { key: string; value: Expr } {
     const key = expect(TokenKind.Ident, "Expected property name").value;
-    // Shorthand: { x } means { x: x }
     if (!at(TokenKind.Colon)) {
       return { key, value: { kind: "ident", name: key, line: peek().line } };
     }
@@ -357,13 +262,9 @@ export function parse(tokens: Token[]): Program {
     return { key, value };
   }
 
-  // Look ahead to determine if ( starts arrow params or a grouped expr
-  // Arrow params: () =>, (x) =>, (x, y) =>
   function isArrowParams(): boolean {
-    let j = pos + 1; // skip (
-    // () => ...
+    let j = pos + 1;
     if (tokens[j]?.kind === TokenKind.RParen && tokens[j + 1]?.kind === TokenKind.Arrow) return true;
-    // (ident, ident, ...) => ...
     while (j < tokens.length) {
       if (tokens[j]?.kind !== TokenKind.Ident) return false;
       j++;

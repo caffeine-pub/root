@@ -18,21 +18,21 @@ function expectPointsTo(result: Map<string, Set<string>>, name: string, ...targe
 describe("direct assignments", () => {
   it("tracks a single closure", () => {
     const r = pointsTo(`
-      let f = () => { return 1; };
+      let f = () => { return {}; };
     `);
     expectPointsTo(r, "f", "fn@2");
   });
 
   it("tracks object allocation", () => {
     const r = pointsTo(`
-      let o = { x: 1 };
+      let o = { x: null };
     `);
     expectPointsTo(r, "o", "obj@2");
   });
 
   it("tracks variable-to-variable copy", () => {
     const r = pointsTo(`
-      let f = () => { return 1; };
+      let f = () => { return {}; };
       let g = f;
     `);
     expectPointsTo(r, "f", "fn@2");
@@ -62,7 +62,7 @@ describe("field sensitivity", () => {
 
   it("tracks nested field access", () => {
     const r = pointsTo(`
-      let inner = { val: () => { return 1; } };
+      let inner = { val: () => { return {}; } };
       let outer = { nested: inner };
       let f = outer.nested.val;
     `);
@@ -74,7 +74,7 @@ describe("call graph discovery", () => {
   it("discovers direct call return value", () => {
     const r = pointsTo(`
       let make = () => {
-        return () => { return 1; };
+        return () => { return {}; };
       };
       let f = make();
     `);
@@ -101,7 +101,7 @@ describe("call graph discovery", () => {
       let unwrap = (o) => {
         return o.val;
       };
-      let f = () => { return 1; };
+      let f = () => { return {}; };
       let w = wrap(f);
       let g = unwrap(w);
     `);
@@ -119,12 +119,12 @@ describe("closures and captures", () => {
     expectPointsTo(r, "result", "obj@2");
   });
 
-  it("tracks factory pattern (makeAdder style)", () => {
+  it("tracks factory pattern", () => {
     const r = pointsTo(`
       let makeHandler = (h) => {
         return () => { return h; };
       };
-      let myFn = () => { return 1; };
+      let myFn = () => { return {}; };
       let wrapped = makeHandler(myFn);
       let result = wrapped();
     `);
@@ -135,10 +135,10 @@ describe("closures and captures", () => {
 describe("branches", () => {
   it("merges points-to sets from both branches", () => {
     const r = pointsTo(`
-      let a = () => { return 1; };
-      let b = () => { return 2; };
-      let f;
-      if (true) {
+      let a = () => { return {}; };
+      let b = () => { return {}; };
+      let f = null;
+      if {
         f = a;
       } else {
         f = b;
@@ -151,8 +151,8 @@ describe("branches", () => {
     const r = pointsTo(`
       let a = (x) => { return x; };
       let b = (x) => { return x; };
-      let f;
-      if (true) {
+      let f = null;
+      if {
         f = a;
       } else {
         f = b;
@@ -180,20 +180,13 @@ describe("loops", () => {
 
   it("handles function built in a loop", () => {
     const r = pointsTo(`
-      let last;
+      let last = null;
       loop {
-        last = () => { return 1; };
+        last = () => { return {}; };
         break;
       }
     `);
-    // last should point to the closure allocated inside the loop
-    const set = pointsTo(`
-      let last;
-      loop {
-        last = () => { return 1; };
-        break;
-      }
-    `).get("last");
+    const set = r.get("last");
     expect(set).toBeDefined();
     expect(set!.size).toBeGreaterThan(0);
   });
@@ -202,19 +195,18 @@ describe("loops", () => {
 describe("mutual recursion", () => {
   it("discovers mutually recursive call graph", () => {
     const r = pointsTo(`
-      let isEven;
-      let isOdd;
+      let isEven = null;
+      let isOdd = null;
       isEven = (n) => {
-        if (n == 0) { return {}; }
-        return isOdd(n - 1);
+        return isOdd(n);
       };
       isOdd = (n) => {
-        if (n == 0) { return {}; }
-        return isEven(n - 1);
+        return isEven(n);
       };
-      let result = isEven(4);
+      let obj = {};
+      let result = isEven(obj);
     `);
-    // result should point to the object literals in both functions
+    // result flows through both functions
     const set = r.get("result");
     expect(set).toBeDefined();
     expect(set!.size).toBeGreaterThan(0);
@@ -224,11 +216,10 @@ describe("mutual recursion", () => {
 describe("forward declarations", () => {
   it("handles forward-declared function", () => {
     const r = pointsTo(`
-      let f;
+      let f = null;
       let result = f();
       f = () => { return {}; };
     `);
-    // after fixpoint iteration, f() should resolve
     const set = r.get("result");
     expect(set).toBeDefined();
     expect(set!.size).toBeGreaterThan(0);
@@ -237,9 +228,6 @@ describe("forward declarations", () => {
 
 describe("multi-step discovery", () => {
   it("discovers call target through field read after call graph update", () => {
-    // Step 1: analyze getHandler, discover it returns an object
-    // Step 2: discover result.f points to the closure
-    // Step 3: discover result.f() calls that closure
     const r = pointsTo(`
       let getHandler = () => {
         return { f: (x) => { return x; } };
