@@ -25,8 +25,6 @@ export interface PlaceMap {
   functions: Map<FunctionNode, FunctionInfo>;
   /** what each expression resolves to statically */
   exprResolution: Map<Expr, Place | PossibleValues | null>;
-  /** callee info: for each call expr, the Place or FunctionExprs that could be called */
-  calleeResolution: Map<FunctionNode, Set<Place | FunctionExpr>>;
 }
 
 class Scope {
@@ -57,20 +55,9 @@ export function buildPlaces(program: Program): PlaceMap {
   const variables = new Map<LetStmt, Place>();
   const functions = new Map<FunctionNode, FunctionInfo>();
   const exprResolution = new Map<Expr, Place | PossibleValues | null>();
-  const calleeResolution = new Map<FunctionNode, Set<Place | FunctionExpr>>();
   const scope = new Scope();
   let level = 0;
   let fnNodeStack: FunctionNode[] = [program];
-
-  function addCallee(place: Place | FunctionExpr) {
-    const fnNode = fnNodeStack.at(-1)!;
-    const exists = calleeResolution.get(fnNode);
-    if (exists) {
-      exists.add(place);
-    } else {
-      calleeResolution.set(fnNode, new Set([place]));
-    }
-  }
 
   function predeclare(stmts: Stmt[]) {
     for (const stmt of stmts) {
@@ -191,18 +178,6 @@ export function buildPlaces(program: Program): PlaceMap {
         const callee = walkExpr(expr.callee);
         for (const arg of expr.args) walkExpr(arg);
 
-        // record callee info for analysis to use
-        if (callee) {
-          if (callee instanceof Place) {
-            addCallee(callee);
-          } else {
-            // direct PossibleValues — we know the functions statically
-            for (const calleeFnExpr of callee.functions) {
-              addCallee(calleeFnExpr);
-            }
-          }
-        }
-
         result = new Place(`call@${expr.line}`, level);
         break;
       }
@@ -225,5 +200,5 @@ export function buildPlaces(program: Program): PlaceMap {
   // program is level 0
   walkFunction(program, []);
 
-  return { variables, functions, exprResolution, calleeResolution };
+  return { variables, functions, exprResolution };
 }

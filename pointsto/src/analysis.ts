@@ -10,7 +10,6 @@ import { CallGraph, FunctionNode } from "./callgraph.js";
 import {
   AbstractObject,
   CallConstraint,
-  CallResolutionContext,
   Constraint,
   FieldLoadConstraint,
   FieldStoreConstraint,
@@ -48,44 +47,29 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
     callgraph.clearDirty();
 
     // phase 1: solve all SCCs
+    const iterations: Iteration[] = [];
     for (const scc of sccs) {
       debug("\nSCC:", scc);
 
       const iteration = new Iteration(placeMap, scc, solutions);
       const constraints = iteration.run();
       debug(constraints);
-      const sccSet = new Set(scc);
-      const callCtx: CallResolutionContext = {
-        functions: placeMap.functions,
-        solutions,
-        currentScc: sccSet,
-      };
-      const solution = solve(constraints, new Map(), callCtx);
+      const solution = solve(constraints);
 
       for (const fn of scc) {
         solutions.set(fn, solution);
       }
+      iterations.push(iteration);
     }
 
     // phase 2: update call graph
-    // static callees from place building
-    for (const [fn, callees] of placeMap.calleeResolution) {
-      for (const callee of callees) {
-        if (callee instanceof Place) {
-          for (const solution of solutions.values()) {
-            const possibleValues = solution.state.get(callee);
-            if (!possibleValues) continue;
-            for (const calleeFnExpr of possibleValues.functions) {
-              callgraph.addEdge(fn, calleeFnExpr);
-            }
-          }
-        } else {
-          callgraph.addEdge(fn, callee);
-        }
+    // direct call edges from constraint generation
+    for (const iteration of iterations) {
+      for (const [caller, callee] of iteration.directCallEdges) {
+        callgraph.addEdge(caller, callee);
       }
     }
-
-    // dynamic callees discovered by the solver via CallConstraints
+    // indirect call edges from solved state
     for (const [fn, solution] of solutions) {
       for (const constraint of solution.constraints) {
         if (constraint instanceof CallConstraint) {
@@ -136,6 +120,9 @@ class Iteration {
 
   private returnVar: Map<FunctionNode, Place> = new Map();
 
+  /** direct call edges discovered during constraint generation */
+  public directCallEdges: [FunctionNode, FunctionExpr][] = [];
+
   constructor(
     private placeMap: PlaceMap,
     private functions: FunctionNode[],
@@ -153,6 +140,8 @@ class Iteration {
 
     return this.constraints;
   }
+
+
 
   stmt(stmt: Stmt): boolean {
     switch (stmt.kind) {
@@ -247,6 +236,7 @@ class Iteration {
         if (callee instanceof PossibleValues) {
           // direct call — we know the callee statically
           for (const calleeFn of callee.functions) {
+            this.directCallEdges.push([this.currentFunction, calleeFn]);
             const fnInfo = this.placeMap.functions.get(calleeFn)!;
             if (this.functions.includes(calleeFn)) {
               // same SCC: wire params/return directly
@@ -284,8 +274,62 @@ class Iteration {
             }
           }
         } else if (callee instanceof Place) {
-          // indirect call — callee is a Place, value unknown at generation time
-          // emit a CallConstraint that the solver will resolve dynamically
+          // indirect call — callee is a Place
+          // check if we already know what it points to from a previous iteration
+          let resolvedFunctions: Set<FunctionExpr> | undefined;
+          for (const solution of this.solutions.values()) {
+            const sv = solution.state.get(callee);
+            if (sv && sv.functions.size > 0) {
+              resolvedFunctions = sv.functions;
+              break;
+            }
+          }
+
+          if (resolvedFunctions) {
+            // we know the callees — wire them like direct calls
+            for (const calleeFn of resolvedFunctions) {
+              const fnInfo = this.placeMap.functions.get(calleeFn)!;
+              if (!fnInfo) continue;
+              if (this.functions.includes(calleeFn)) {
+                // same SCC: wire params/return directly
+                const paramCount = Math.min(expr.args.length, fnInfo.params.length);
+                for (let i = 0; i < paramCount; i++) {
+                  const arg = this.expr(expr.args[i]);
+                  if (arg)
+                    this.constraints.push(
+                      new SubsetConstraint(fnInfo.params[i], arg),
+                    );
+                }
+                this.constraints.push(
+                  new SubsetConstraint(place, fnInfo.returnVar),
+                );
+              } else {
+                // cross-SCC: instantiate
+                const calleeSolution = this.solutions.get(calleeFn);
+                if (!calleeSolution) continue;
+                const instantiated = calleeSolution.instantiate(fnInfo.level);
+
+                const paramCount2 = Math.min(expr.args.length, fnInfo.params.length);
+                for (let i = 0; i < paramCount2; i++) {
+                  const arg = this.expr(expr.args[i]);
+                  const param =
+                    instantiated.rewrite.get(fnInfo.params[i]) ??
+                    fnInfo.params[i];
+                  if (arg)
+                    this.constraints.push(new SubsetConstraint(param, arg));
+                }
+
+                this.constraints.push(...instantiated.newConstraints);
+
+                const returnVar =
+                  instantiated.rewrite.get(fnInfo.returnVar) ?? fnInfo.returnVar;
+                this.constraints.push(new SubsetConstraint(place, returnVar));
+              }
+            }
+          }
+
+          // always emit a CallConstraint so the solver can discover
+          // new callees and the outer loop can update the callgraph
           const argPlaces: (Place | PossibleValues | null)[] = [];
           for (let i = 0; i < expr.args.length; i++) {
             argPlaces.push(this.expr(expr.args[i]));

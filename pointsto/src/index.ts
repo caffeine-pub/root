@@ -13,11 +13,11 @@ if (process.env.DEBUG) {
   const result = analyze(
     parse(
       lex(`
-    let a = (cb) => {
-      return b(cb);
+    let a = (x) => {
+      return b(x);
     };
-    let b = (cb) => {
-      return cb();
+    let b = (y) => {
+      return y();
     };
     let target = {};
     let result = a(() => { return target; });
