@@ -264,7 +264,7 @@ describe("multi-step discovery", () => {
       let obj = {};
       let result = apply(fn, obj);
     `);
-    expectPointsTo(r, "result", "obj@8");
+    expectPointsTo(r, "result", "obj@9");
   });
 
   it("callback passed through multiple hops", () => {

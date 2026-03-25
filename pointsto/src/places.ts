@@ -92,6 +92,16 @@ export function buildPlaces(program: Program): PlaceMap {
       level,
     });
 
+    // pre-declare all let bindings so function bodies can forward-reference
+    // variables declared later in the same scope (like JS hoisting)
+    for (const stmt of node.body) {
+      if (stmt.kind === "let") {
+        const place = new Place(stmt.name, level);
+        variables.set(stmt, place);
+        scope.declare(stmt.name, place);
+      }
+    }
+
     for (const stmt of node.body) {
       walkStmt(stmt);
     }
@@ -101,9 +111,7 @@ export function buildPlaces(program: Program): PlaceMap {
   function walkStmt(stmt: Stmt) {
     switch (stmt.kind) {
       case "let": {
-        const place = new Place(stmt.name, level);
-        variables.set(stmt, place);
-        scope.declare(stmt.name, place);
+        // place already created in walkFunction's pre-declare pass
         if (stmt.init) walkExpr(stmt.init);
         break;
       }

@@ -13,12 +13,16 @@ if (process.env.DEBUG) {
   const result = analyze(
     parse(
       lex(`
-    let apply = (f, x) => {
-      return f(x);
+    let isEven = null;
+    let isOdd = null;
+    isEven = (n) => {
+      return isOdd(n);
     };
-    let id = (x) => { return x; };
+    isOdd = (n) => {
+      return isEven(n);
+    };
     let obj = {};
-    let result = apply(id, obj);
+    let result = isEven(obj);
   `),
     ),
   );
