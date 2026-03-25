@@ -134,6 +134,7 @@ export function buildPlaces(program: Program): PlaceMap {
         walkExpr(stmt.expr);
         break;
       case "if":
+        if (stmt.condition) walkExpr(stmt.condition);
         for (const s of stmt.then) walkStmt(s);
         if (stmt.else_) for (const s of stmt.else_) walkStmt(s);
         break;
@@ -167,7 +168,17 @@ export function buildPlaces(program: Program): PlaceMap {
         break;
       }
       case "number":
+      case "bool":
       case "null":
+        result = null;
+        break;
+      case "binary":
+        walkExpr(expr.left);
+        walkExpr(expr.right);
+        result = null;
+        break;
+      case "unary":
+        walkExpr(expr.operand);
         result = null;
         break;
       case "object": {
