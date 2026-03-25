@@ -114,7 +114,7 @@ export function buildPlaces(program: Program): PlaceMap {
     });
 
     // pre-declare all let bindings so function bodies can forward-reference
-    // variables declared later in the same scope (like JS hoisting)
+    // variables declared later in the same scope (enable forward references)
     predeclare(node.body);
 
     for (const stmt of node.body) {

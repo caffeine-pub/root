@@ -23,7 +23,7 @@ import {
 import { buildPlaces, PlaceMap } from "./places.js";
 
 const assert = <T>(arg: T | undefined | null): T => {
-  if (arg === undefined || arg == null) throw new Error("assertion failed");
+  if (arg == null) throw new Error("assertion failed");
   return arg;
 };
 
