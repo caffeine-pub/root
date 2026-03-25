@@ -230,6 +230,10 @@ class Iteration {
         if (callee instanceof PossibleValues) {
           possibleCallees = callee.functions;
         } else if (callee instanceof Place) {
+          // mark callee as used
+          // TODO: CallConstraint
+          this.constraints.push(new SubsetConstraint(callee, callee));
+
           // check ALL solutions — a param like `f` in `apply(f, x)`
           // only gets its value through instantiation in the caller's
           // constraint set, not in the callee's own solution
