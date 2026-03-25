@@ -330,7 +330,13 @@ export function solve(
 
   return {
     state,
-    instantiate: (atLevel: number) =>
-      instantiate([...remainingEquations], atLevel),
+    instantiate: (atLevel: number) => {
+      const inst = instantiate([...remainingEquations], atLevel);
+      for (const [oldPlace, values] of state) {
+        const place = inst.rewrite.get(oldPlace) ?? oldPlace;
+        inst.newConstraints.push(new SubsetConstraint(place, values));
+      }
+      return inst;
+    },
   };
 }

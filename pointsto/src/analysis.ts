@@ -21,6 +21,15 @@ import {
 } from "./kleene.js";
 import { buildPlaces, PlaceMap } from "./places.js";
 
+const assert = <T>(arg: T | undefined | null): T => {
+  if (arg === undefined || arg == null) throw new Error("assertion failed");
+  return arg;
+};
+
+const debug = (...args: any[]) => {
+  if (process.env.DEBUG) console.log(...args);
+};
+
 const todo = (): never => {
   throw new Error("todo");
 };
@@ -34,11 +43,15 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
 
   let sccs: FunctionNode[][] = [[program]];
   for (let i = 0; i < 5000; i++) {
+    debug("\niteration", i);
     callgraph.clearDirty();
 
     for (const scc of sccs) {
+      debug("\nSCC:", scc);
+
       const iteration = new Iteration(placeMap, scc, solutions);
       const constraints = iteration.run();
+      debug(constraints);
       const solution = solve(constraints);
 
       // add to callgraph
@@ -67,6 +80,10 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
     }
 
     sccs = callgraph.sccs();
+  }
+
+  if (callgraph.dirty) {
+    throw new Error("analysis failed to converge after 5000 iterations");
   }
 
   const merged = new Map<Place, PossibleValues>();
@@ -235,7 +252,7 @@ class Iteration {
               );
             } else {
               // instantiate
-              const calleeSolution = this.solutions.get(calleeFn)!;
+              const calleeSolution = assert(this.solutions.get(calleeFn));
               const instantiated = calleeSolution.instantiate(fnInfo.level);
 
               // TODO: it's possible but less precise to cache these instantiations
@@ -243,7 +260,9 @@ class Iteration {
               // params
               for (let i = 0; i < expr.args.length; i++) {
                 const arg = this.expr(expr.args[i]);
-                const param = instantiated.rewrite.get(fnInfo.params[i])!;
+                const param =
+                  instantiated.rewrite.get(fnInfo.params[i]) ??
+                  fnInfo.params[i];
                 if (arg)
                   this.constraints.push(new SubsetConstraint(param, arg));
               }
@@ -252,7 +271,8 @@ class Iteration {
               this.constraints.push(...instantiated.newConstraints);
 
               // return value
-              const returnVar = instantiated.rewrite.get(fnInfo.returnVar)!;
+              const returnVar =
+                instantiated.rewrite.get(fnInfo.returnVar) ?? fnInfo.returnVar;
               this.constraints.push(new SubsetConstraint(place, returnVar));
             }
           }
