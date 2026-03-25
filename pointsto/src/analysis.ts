@@ -46,6 +46,7 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
     debug("\niteration", i);
     callgraph.clearDirty();
 
+    // phase 1: solve all SCCs
     for (const scc of sccs) {
       debug("\nSCC:", scc);
 
@@ -54,23 +55,27 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
       debug(constraints);
       const solution = solve(constraints);
 
-      // add to callgraph
       for (const fn of scc) {
         solutions.set(fn, solution);
+      }
+    }
 
-        // get all related places / devirtualized functions
-        const callees = placeMap.calleeResolution.get(fn);
-        if (!callees) continue;
-        for (const callee of callees) {
-          if (callee instanceof Place) {
+    // phase 2: update call graph using ALL solutions
+    // a callee Place (e.g. param `f` in `apply`) may only get its value
+    // through instantiation in a different SCC's constraints, so we need
+    // to check every solution, not just the callee's own SCC's solution
+    for (const [fn, callees] of placeMap.calleeResolution) {
+      for (const callee of callees) {
+        if (callee instanceof Place) {
+          for (const solution of solutions.values()) {
             const possibleValues = solution.state.get(callee);
             if (!possibleValues) continue;
             for (const calleeFnExpr of possibleValues.functions) {
               callgraph.addEdge(fn, calleeFnExpr);
             }
-          } else {
-            callgraph.addEdge(fn, callee);
           }
+        } else {
+          callgraph.addEdge(fn, callee);
         }
       }
     }
@@ -222,13 +227,17 @@ class Iteration {
         if (callee instanceof PossibleValues) {
           possibleCallees = callee.functions;
         } else if (callee instanceof Place) {
-          const lastSolution = this.solutions.get(this.currentFunction);
-          if (lastSolution) {
-            const exists = lastSolution.state.get(callee);
+          // check ALL solutions — a param like `f` in `apply(f, x)`
+          // only gets its value through instantiation in the caller's
+          // constraint set, not in the callee's own solution
+          const combined = new Set<FunctionExpr>();
+          for (const solution of this.solutions.values()) {
+            const exists = solution.state.get(callee);
             if (exists) {
-              possibleCallees = exists.functions;
+              for (const fn of exists.functions) combined.add(fn);
             }
           }
+          if (combined.size > 0) possibleCallees = combined;
         }
 
         if (possibleCallees) {
