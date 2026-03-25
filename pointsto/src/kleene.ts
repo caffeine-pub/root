@@ -341,7 +341,8 @@ export function solve(
 
           if (callCtx.currentScc.has(calleeFn)) {
             // same SCC: wire directly to original params/return
-            for (let i = 0; i < constraint.args.length; i++) {
+            const paramCount = Math.min(constraint.args.length, fnInfo.params.length);
+            for (let i = 0; i < paramCount; i++) {
               const arg = constraint.args[i];
               if (arg) {
                 const newConstraint = new SubsetConstraint(fnInfo.params[i], arg);
@@ -367,7 +368,8 @@ export function solve(
             const inst = calleeSolution.instantiate(fnInfo.level);
 
             // wire args → instantiated params
-            for (let i = 0; i < constraint.args.length; i++) {
+            const paramCount2 = Math.min(constraint.args.length, fnInfo.params.length);
+            for (let i = 0; i < paramCount2; i++) {
               const arg = constraint.args[i];
               const param = inst.rewrite.get(fnInfo.params[i]) ?? fnInfo.params[i];
               if (arg) {

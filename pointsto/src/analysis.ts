@@ -250,7 +250,8 @@ class Iteration {
             const fnInfo = this.placeMap.functions.get(calleeFn)!;
             if (this.functions.includes(calleeFn)) {
               // same SCC: wire params/return directly
-              for (let i = 0; i < expr.args.length; i++) {
+              const paramCount = Math.min(expr.args.length, fnInfo.params.length);
+              for (let i = 0; i < paramCount; i++) {
                 const arg = this.expr(expr.args[i]);
                 if (arg)
                   this.constraints.push(
@@ -265,7 +266,8 @@ class Iteration {
               const calleeSolution = assert(this.solutions.get(calleeFn));
               const instantiated = calleeSolution.instantiate(fnInfo.level);
 
-              for (let i = 0; i < expr.args.length; i++) {
+              const paramCount2 = Math.min(expr.args.length, fnInfo.params.length);
+              for (let i = 0; i < paramCount2; i++) {
                 const arg = this.expr(expr.args[i]);
                 const param =
                   instantiated.rewrite.get(fnInfo.params[i]) ??
