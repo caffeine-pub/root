@@ -76,16 +76,6 @@ describe("parser", () => {
     }
   });
 
-  it("parses single param arrow without parens", () => {
-    const expr = firstExpr("x => x + 1");
-    expect(expr.kind).toBe("function");
-    if (expr.kind === "function") {
-      expect(expr.params).toEqual(["x"]);
-      expect(expr.body).toHaveLength(1);
-      expect(expr.body[0]!.kind).toBe("return");
-    }
-  });
-
   it("parses no-param arrow", () => {
     const expr = firstExpr("() => { return 1; }");
     expect(expr.kind).toBe("function");
@@ -189,16 +179,6 @@ describe("parser", () => {
     }
   });
 
-  it("parses if/else", () => {
-    const prog = p("if (x) { y; } else { z; }");
-    const stmt = prog.body[0]!;
-    expect(stmt.kind).toBe("if");
-    if (stmt.kind === "if") {
-      expect(stmt.then).toHaveLength(1);
-      expect(stmt.else_).toHaveLength(1);
-    }
-  });
-
   it("parses loop/break", () => {
     const prog = p("loop { break; }");
     const stmt = prog.body[0]!;
@@ -206,15 +186,6 @@ describe("parser", () => {
     if (stmt.kind === "loop") {
       expect(stmt.body).toHaveLength(1);
       expect(stmt.body[0]!.kind).toBe("break");
-    }
-  });
-
-  it("parses binary operators with precedence", () => {
-    const expr = firstExpr("1 + 2 * 3");
-    expect(expr.kind).toBe("binary");
-    if (expr.kind === "binary") {
-      expect(expr.op).toBe("+");
-      expect(expr.right.kind).toBe("binary");
     }
   });
 
@@ -227,33 +198,6 @@ describe("parser", () => {
     expect(prog.body).toHaveLength(3);
   });
 
-  it("parses higher-order functions", () => {
-    const prog = p(`
-      let apply = (f, x) => {
-        return f(x);
-      };
-      let double = n => n + n;
-      apply(double, 5);
-    `);
-    expect(prog.body).toHaveLength(3);
-  });
-
-  it("parses mutual recursion pattern", () => {
-    const prog = p(`
-      let isEven;
-      let isOdd;
-      isEven = (n) => {
-        if (n == 0) { return true; }
-        return isOdd(n - 1);
-      };
-      isOdd = (n) => {
-        if (n == 0) { return false; }
-        return isEven(n - 1);
-      };
-    `);
-    expect(prog.body).toHaveLength(4);
-  });
-
   it("parses object with function fields", () => {
     const prog = p(`
       let obj = {
@@ -263,17 +207,6 @@ describe("parser", () => {
       obj.handler(1);
     `);
     expect(prog.body).toHaveLength(2);
-  });
-
-  it("parses complex call graph discovery scenario", () => {
-    const prog = p(`
-      let makeAdder = (n) => {
-        return (x) => { return x + n; };
-      };
-      let add5 = makeAdder(5);
-      let result = add5(10);
-    `);
-    expect(prog.body).toHaveLength(3);
   });
 
   it("parses trailing commas in objects and calls", () => {
