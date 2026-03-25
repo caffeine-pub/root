@@ -168,7 +168,6 @@ class Iteration {
         return true;
       }
       case "if": {
-        if (stmt.condition) this.expr(stmt.condition);
         let firstContinues = true;
         for (const s of stmt.then) {
           firstContinues = this.stmt(s);
@@ -220,15 +219,7 @@ class Iteration {
         return this.placeMap.exprResolution.get(expr)!;
       }
       case "number":
-      case "bool":
       case "null":
-        return null;
-      case "binary":
-        this.expr(expr.left);
-        this.expr(expr.right);
-        return null;
-      case "unary":
-        this.expr(expr.operand);
         return null;
       case "object": {
         const result = this.placeMap.exprResolution.get(expr)!;

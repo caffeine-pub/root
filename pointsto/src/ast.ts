@@ -3,15 +3,12 @@
 export type Expr =
   | IdentExpr
   | NumberLit
-  | BoolLit
   | NullLit
   | ObjectLit
   | FunctionExpr
   | CallExpr
   | MemberExpr
-  | AssignExpr
-  | BinaryExpr
-  | UnaryExpr;
+  | AssignExpr;
 
 export interface IdentExpr {
   kind: "ident";
@@ -22,12 +19,6 @@ export interface IdentExpr {
 export interface NumberLit {
   kind: "number";
   value: number;
-  line: number;
-}
-
-export interface BoolLit {
-  kind: "bool";
-  value: boolean;
   line: number;
 }
 
@@ -72,21 +63,6 @@ export interface AssignExpr {
   line: number;
 }
 
-export interface BinaryExpr {
-  kind: "binary";
-  op: string;
-  left: Expr;
-  right: Expr;
-  line: number;
-}
-
-export interface UnaryExpr {
-  kind: "unary";
-  op: string;
-  operand: Expr;
-  line: number;
-}
-
 // ---- Statements ----
 
 export type Stmt =
@@ -112,7 +88,6 @@ export interface LetStmt {
 
 export interface IfStmt {
   kind: "if";
-  condition: Expr | null;
   then: Stmt[];
   else_: Stmt[] | null;
   line: number;

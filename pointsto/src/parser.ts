@@ -73,12 +73,6 @@ export function parse(tokens: Token[]): Program {
 
   function parseIfStmt(): Stmt {
     const tok = expect(TokenKind.If);
-    let condition: Expr | null = null;
-    if (at(TokenKind.LParen)) {
-      advance();
-      condition = parseExpr();
-      expect(TokenKind.RParen);
-    }
     const then = parseBlockBody();
     let else_: Stmt[] | null = null;
     if (eat(TokenKind.Else)) {
@@ -88,7 +82,7 @@ export function parse(tokens: Token[]): Program {
         else_ = parseBlockBody();
       }
     }
-    return { kind: "if", condition, then, else_, line: tok.line };
+    return { kind: "if", then, else_, line: tok.line };
   }
 
   function parseLoopStmt(): Stmt {
@@ -144,39 +138,8 @@ export function parse(tokens: Token[]): Program {
     return parseAssign();
   }
 
-  // binary operators grouped by precedence (lower index = lower precedence)
-  const PREC: TokenKind[][] = [
-    [TokenKind.Or],                                        // ||
-    [TokenKind.And],                                       // &&
-    [TokenKind.EqEq, TokenKind.BangEq],                   // == != === !==
-    [TokenKind.Lt, TokenKind.Gt, TokenKind.LtEq, TokenKind.GtEq], // < > <= >=
-    [TokenKind.Plus, TokenKind.Minus],                     // + -
-    [TokenKind.Star, TokenKind.Slash],                     // * /
-  ];
-
-  function parseBinary(level: number = 0): Expr {
-    if (level >= PREC.length) return parseUnary();
-    let left = parseBinary(level + 1);
-    const ops = PREC[level]!;
-    while (ops.includes(peek().kind)) {
-      const op = advance();
-      const right = parseBinary(level + 1);
-      left = { kind: "binary", op: op.value, left, right, line: left.line };
-    }
-    return left;
-  }
-
-  function parseUnary(): Expr {
-    if (at(TokenKind.Bang) || at(TokenKind.Minus)) {
-      const op = advance();
-      const operand = parseUnary();
-      return { kind: "unary", op: op.value, operand, line: op.line };
-    }
-    return parsePostfix();
-  }
-
   function parseAssign(): Expr {
-    const left = parseBinary();
+    const left = parsePostfix();
 
     if (at(TokenKind.Eq)) {
       advance();
@@ -242,16 +205,6 @@ export function parse(tokens: Token[]): Program {
     if (at(TokenKind.Number)) {
       advance();
       return { kind: "number", value: parseFloat(tok.value), line: tok.line };
-    }
-
-    if (at(TokenKind.True)) {
-      advance();
-      return { kind: "bool", value: true, line: tok.line };
-    }
-
-    if (at(TokenKind.False)) {
-      advance();
-      return { kind: "bool", value: false, line: tok.line };
     }
 
     if (at(TokenKind.Null)) {

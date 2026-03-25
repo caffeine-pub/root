@@ -169,8 +169,8 @@ export function lex(source: string): Token[] {
 
     // Two-character operators
     if (ch === "=" && source[i + 1] === ">") { advance(); advance(); emit(TokenKind.Arrow, "=>", startLine, startCol); continue; }
-    if (ch === "=" && source[i + 1] === "=") { advance(); advance(); if (peek() === "=") { advance(); emit(TokenKind.EqEq, "===", startLine, startCol); } else { emit(TokenKind.EqEq, "==", startLine, startCol); } continue; }
-    if (ch === "!" && source[i + 1] === "=") { advance(); advance(); if (peek() === "=") { advance(); emit(TokenKind.BangEq, "!==", startLine, startCol); } else { emit(TokenKind.BangEq, "!=", startLine, startCol); } continue; }
+    if (ch === "=" && source[i + 1] === "=") { advance(); advance(); emit(TokenKind.EqEq, "==", startLine, startCol); continue; }
+    if (ch === "!" && source[i + 1] === "=") { advance(); advance(); emit(TokenKind.BangEq, "!=", startLine, startCol); continue; }
     if (ch === "<" && source[i + 1] === "=") { advance(); advance(); emit(TokenKind.LtEq, "<=", startLine, startCol); continue; }
     if (ch === ">" && source[i + 1] === "=") { advance(); advance(); emit(TokenKind.GtEq, ">=", startLine, startCol); continue; }
     if (ch === "&" && source[i + 1] === "&") { advance(); advance(); emit(TokenKind.And, "&&", startLine, startCol); continue; }
