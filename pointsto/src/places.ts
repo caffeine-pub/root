@@ -72,6 +72,27 @@ export function buildPlaces(program: Program): PlaceMap {
     }
   }
 
+  function predeclare(stmts: Stmt[]) {
+    for (const stmt of stmts) {
+      switch (stmt.kind) {
+        case "let": {
+          const place = new Place(stmt.name, level);
+          variables.set(stmt, place);
+          scope.declare(stmt.name, place);
+          break;
+        }
+        case "if":
+          predeclare(stmt.then);
+          if (stmt.else_) predeclare(stmt.else_);
+          break;
+        case "loop":
+        case "block":
+          predeclare(stmt.body);
+          break;
+      }
+    }
+  }
+
   function walkFunction(node: FunctionNode, params: string[]) {
     fnNodeStack.push(node);
     const paramPlaces: Place[] = [];
@@ -94,13 +115,7 @@ export function buildPlaces(program: Program): PlaceMap {
 
     // pre-declare all let bindings so function bodies can forward-reference
     // variables declared later in the same scope (like JS hoisting)
-    for (const stmt of node.body) {
-      if (stmt.kind === "let") {
-        const place = new Place(stmt.name, level);
-        variables.set(stmt, place);
-        scope.declare(stmt.name, place);
-      }
-    }
+    predeclare(node.body);
 
     for (const stmt of node.body) {
       walkStmt(stmt);

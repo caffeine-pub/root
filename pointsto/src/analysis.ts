@@ -185,7 +185,10 @@ class Iteration {
         return false;
       }
       case "block": {
-        for (const stmt2 of stmt.body) this.stmt(stmt2);
+        for (const stmt2 of stmt.body) {
+          const shouldContinue = this.stmt(stmt2);
+          if (!shouldContinue) return false;
+        }
         return true;
       }
     }
