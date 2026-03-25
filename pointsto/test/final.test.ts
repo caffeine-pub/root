@@ -18,7 +18,11 @@ function pointsTo(source: string): Map<string, Set<string>> {
 }
 
 // helper: check that variable `name` points to allocation sites with given labels
-function expectPointsTo(result: Map<string, Set<string>>, name: string, ...targets: string[]) {
+function expectPointsTo(
+  result: Map<string, Set<string>>,
+  name: string,
+  ...targets: string[]
+) {
   const set = result.get(name);
   expect(set, `expected ${name} to exist in results`).toBeDefined();
   expect([...set!].sort()).toEqual(targets.sort());

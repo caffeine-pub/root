@@ -16,6 +16,7 @@ import {
   Place,
   PossibleValues,
   solve,
+  SolverResult,
   SubsetConstraint,
 } from "./kleene.js";
 import { buildPlaces, PlaceMap } from "./places.js";
@@ -29,24 +30,27 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
   const placeMap = buildPlaces(program);
 
   const callgraph = new CallGraph();
-  let solution: Map<Place, PossibleValues> = new Map();
+  let solutions: Map<FunctionNode, SolverResult> = new Map();
 
   let sccs: FunctionNode[][] = [[program]];
   for (let i = 0; i < 5000; i++) {
     callgraph.clearDirty();
 
     for (const scc of sccs) {
-      const iteration = new Iteration(placeMap, scc, solution);
+      const iteration = new Iteration(placeMap, scc, solutions);
       const constraints = iteration.run();
-      solution = solve(constraints).state;
+      const solution = solve(constraints);
 
       // add to callgraph
       for (const fn of scc) {
+        solutions.set(fn, solution);
+
+        // get all related places / devirtualized functions
         const callees = placeMap.calleeResolution.get(fn);
         if (!callees) continue;
         for (const callee of callees) {
           if (callee instanceof Place) {
-            const possibleValues = solution.get(callee);
+            const possibleValues = solution.state.get(callee);
             if (!possibleValues) continue;
             for (const calleeFnExpr of possibleValues.functions) {
               callgraph.addEdge(fn, calleeFnExpr);
@@ -65,7 +69,25 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
     sccs = callgraph.sccs();
   }
 
-  return solution;
+  const merged = new Map<Place, PossibleValues>();
+  for (const solution of solutions.values()) {
+    for (const [place, values] of solution.state) {
+      const existing = merged.get(place);
+      if (existing) {
+        existing.addAll(values);
+      } else {
+        merged.set(
+          place,
+          new PossibleValues(
+            new Set(values.objects),
+            new Set(values.functions),
+          ),
+        );
+      }
+    }
+  }
+
+  return merged;
 }
 
 class Iteration {
@@ -77,44 +99,72 @@ class Iteration {
   constructor(
     private placeMap: PlaceMap,
     private functions: FunctionNode[],
-    private solution: Map<Place, PossibleValues> = new Map(),
+    private solutions: Map<FunctionNode, SolverResult>,
   ) {}
 
   run() {
     for (const fn of this.functions) {
       this.currentFunction = fn;
       for (const stmt of fn.body) {
-        this.stmt(stmt);
+        const shouldContinue = this.stmt(stmt);
+        if (!shouldContinue) break;
       }
     }
 
     return this.constraints;
   }
 
-  stmt(stmt: Stmt) {
+  stmt(stmt: Stmt): boolean {
     switch (stmt.kind) {
       case "expr":
         this.expr(stmt.expr);
-        break;
+        return true;
       case "let": {
         const lhs = this.placeMap.variables.get(stmt)!;
         if (stmt.init) {
           const rhs = this.expr(stmt.init);
           if (rhs) this.constraints.push(new SubsetConstraint(lhs, rhs));
         }
-        break;
+        return true;
       }
-      case "if":
-        return todo();
-      case "loop":
-        return todo();
+      case "if": {
+        let firstContinues = true;
+        for (const s of stmt.then) {
+          firstContinues = this.stmt(s);
+          if (!firstContinues) break;
+        }
+
+        let secondContinues = true;
+        if (stmt.else_) {
+          for (const s of stmt.else_) {
+            secondContinues = this.stmt(s);
+            if (!secondContinues) break;
+          }
+        }
+
+        return firstContinues || secondContinues;
+      }
+      case "loop": {
+        for (const s of stmt.body) {
+          const shouldContinue = this.stmt(s);
+          if (!shouldContinue) break;
+        }
+        return true;
+      }
       case "break":
-        return todo();
-      case "return":
-        // need to stop walking the branch here
-        return todo();
+        return false;
+      case "return": {
+        if (stmt.value) {
+          const fnInfo = this.placeMap.functions.get(this.currentFunction)!;
+          const expr = this.expr(stmt.value);
+          if (expr)
+            this.constraints.push(new SubsetConstraint(fnInfo.returnVar, expr));
+        }
+        return false;
+      }
       case "block": {
         for (const stmt2 of stmt.body) this.stmt(stmt2);
+        return true;
       }
     }
   }
@@ -151,7 +201,62 @@ class Iteration {
         const place = this.placeMap.exprResolution.get(expr)! as Place;
         const callee = this.expr(expr.callee);
 
-        // TODO: instantiate and process returns if previous solution found
+        let possibleCallees = null;
+        if (callee instanceof PossibleValues) {
+          possibleCallees = callee.functions;
+        } else if (callee instanceof Place) {
+          const lastSolution = this.solutions.get(this.currentFunction);
+          if (lastSolution) {
+            const exists = lastSolution.state.get(callee);
+            if (exists) {
+              possibleCallees = exists.functions;
+            }
+          }
+        }
+
+        if (possibleCallees) {
+          for (const calleeFn of possibleCallees) {
+            const fnInfo = this.placeMap.functions.get(calleeFn)!;
+            if (this.functions.includes(calleeFn)) {
+              // params
+              for (let i = 0; i < expr.args.length; i++) {
+                const arg = this.expr(expr.args[i]);
+                // TODO: remove null from `expr`, number and null should return
+                // blank PossibleValues, because they are not holes
+                if (arg)
+                  this.constraints.push(
+                    new SubsetConstraint(fnInfo.params[i], arg),
+                  );
+              }
+
+              // return value
+              this.constraints.push(
+                new SubsetConstraint(place, fnInfo.returnVar),
+              );
+            } else {
+              // instantiate
+              const calleeSolution = this.solutions.get(calleeFn)!;
+              const instantiated = calleeSolution.instantiate(fnInfo.level);
+
+              // TODO: it's possible but less precise to cache these instantiations
+
+              // params
+              for (let i = 0; i < expr.args.length; i++) {
+                const arg = this.expr(expr.args[i]);
+                const param = instantiated.rewrite.get(fnInfo.params[i])!;
+                if (arg)
+                  this.constraints.push(new SubsetConstraint(param, arg));
+              }
+
+              // function body
+              this.constraints.push(...instantiated.newConstraints);
+
+              // return value
+              const returnVar = instantiated.rewrite.get(fnInfo.returnVar)!;
+              this.constraints.push(new SubsetConstraint(place, returnVar));
+            }
+          }
+        }
 
         return place;
       }

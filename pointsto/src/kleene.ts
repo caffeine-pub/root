@@ -175,7 +175,7 @@ function instantiate(
   return { rewrite, newConstraints };
 }
 
-interface SolverResult {
+export interface SolverResult {
   state: Map<Place, PossibleValues>;
   instantiate: (atLevel: number) => InstantiateResult;
 }
