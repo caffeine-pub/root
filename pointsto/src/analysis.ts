@@ -1,4 +1,3 @@
-import { HashSet } from "ts-hash";
 import type {
   Expr,
   FunctionExpr,
@@ -10,6 +9,8 @@ import type {
 import { CallGraph, FunctionNode } from "./callgraph.js";
 import {
   AbstractObject,
+  CallConstraint,
+  CallResolutionContext,
   Constraint,
   FieldLoadConstraint,
   FieldStoreConstraint,
@@ -53,17 +54,21 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
       const iteration = new Iteration(placeMap, scc, solutions);
       const constraints = iteration.run();
       debug(constraints);
-      const solution = solve(constraints);
+      const sccSet = new Set(scc);
+      const callCtx: CallResolutionContext = {
+        functions: placeMap.functions,
+        solutions,
+        currentScc: sccSet,
+      };
+      const solution = solve(constraints, new Map(), callCtx);
 
       for (const fn of scc) {
         solutions.set(fn, solution);
       }
     }
 
-    // phase 2: update call graph using ALL solutions
-    // a callee Place (e.g. param `f` in `apply`) may only get its value
-    // through instantiation in a different SCC's constraints, so we need
-    // to check every solution, not just the callee's own SCC's solution
+    // phase 2: update call graph
+    // static callees from place building
     for (const [fn, callees] of placeMap.calleeResolution) {
       for (const callee of callees) {
         if (callee instanceof Place) {
@@ -76,6 +81,19 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
           }
         } else {
           callgraph.addEdge(fn, callee);
+        }
+      }
+    }
+
+    // dynamic callees discovered by the solver via CallConstraints
+    for (const [fn, solution] of solutions) {
+      for (const constraint of solution.constraints) {
+        if (constraint instanceof CallConstraint) {
+          const calleeValues = solution.state.get(constraint.callee);
+          if (!calleeValues) continue;
+          for (const calleeFnExpr of calleeValues.functions) {
+            callgraph.addEdge(fn, calleeFnExpr);
+          }
         }
       }
     }
@@ -226,54 +244,27 @@ class Iteration {
         const place = this.placeMap.exprResolution.get(expr)! as Place;
         const callee = this.expr(expr.callee);
 
-        let possibleCallees = null;
         if (callee instanceof PossibleValues) {
-          possibleCallees = callee.functions;
-        } else if (callee instanceof Place) {
-          // mark callee as used
-          // TODO: CallConstraint
-          this.constraints.push(new SubsetConstraint(callee, callee));
-
-          // check ALL solutions — a param like `f` in `apply(f, x)`
-          // only gets its value through instantiation in the caller's
-          // constraint set, not in the callee's own solution
-          const combined = new Set<FunctionExpr>();
-          for (const solution of this.solutions.values()) {
-            const exists = solution.state.get(callee);
-            if (exists) {
-              for (const fn of exists.functions) combined.add(fn);
-            }
-          }
-          if (combined.size > 0) possibleCallees = combined;
-        }
-
-        if (possibleCallees) {
-          for (const calleeFn of possibleCallees) {
+          // direct call — we know the callee statically
+          for (const calleeFn of callee.functions) {
             const fnInfo = this.placeMap.functions.get(calleeFn)!;
             if (this.functions.includes(calleeFn)) {
-              // params
+              // same SCC: wire params/return directly
               for (let i = 0; i < expr.args.length; i++) {
                 const arg = this.expr(expr.args[i]);
-                // TODO: remove null from `expr`, number and null should return
-                // blank PossibleValues, because they are not holes
                 if (arg)
                   this.constraints.push(
                     new SubsetConstraint(fnInfo.params[i], arg),
                   );
               }
-
-              // return value
               this.constraints.push(
                 new SubsetConstraint(place, fnInfo.returnVar),
               );
             } else {
-              // instantiate
+              // cross-SCC: instantiate
               const calleeSolution = assert(this.solutions.get(calleeFn));
               const instantiated = calleeSolution.instantiate(fnInfo.level);
 
-              // TODO: it's possible but less precise to cache these instantiations
-
-              // params
               for (let i = 0; i < expr.args.length; i++) {
                 const arg = this.expr(expr.args[i]);
                 const param =
@@ -283,15 +274,23 @@ class Iteration {
                   this.constraints.push(new SubsetConstraint(param, arg));
               }
 
-              // function body
               this.constraints.push(...instantiated.newConstraints);
 
-              // return value
               const returnVar =
                 instantiated.rewrite.get(fnInfo.returnVar) ?? fnInfo.returnVar;
               this.constraints.push(new SubsetConstraint(place, returnVar));
             }
           }
+        } else if (callee instanceof Place) {
+          // indirect call — callee is a Place, value unknown at generation time
+          // emit a CallConstraint that the solver will resolve dynamically
+          const argPlaces: (Place | PossibleValues | null)[] = [];
+          for (let i = 0; i < expr.args.length; i++) {
+            argPlaces.push(this.expr(expr.args[i]));
+          }
+          this.constraints.push(
+            new CallConstraint(place, callee, argPlaces),
+          );
         }
 
         return place;

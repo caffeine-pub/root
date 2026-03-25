@@ -108,6 +108,18 @@ export class FieldStoreConstraint extends Constraint {
   }
 }
 
+export class CallConstraint extends Constraint {
+  // result = callee(...args)
+  // when callee resolves to functions, wire args → params and return → result
+  constructor(
+    public result: Place,
+    public callee: Place,
+    public args: (Place | PossibleValues | null)[],
+  ) {
+    super();
+  }
+}
+
 interface InstantiateResult {
   rewrite: WeakMap<Place, Place>;
   newConstraints: Constraint[];
@@ -169,6 +181,20 @@ function instantiate(
           constraint.field,
         ),
       );
+    } else if (constraint instanceof CallConstraint) {
+      newConstraints.push(
+        new CallConstraint(
+          lookup(constraint.result),
+          lookup(constraint.callee),
+          constraint.args.map((a) =>
+            a instanceof Place
+              ? lookup(a)
+              : a instanceof PossibleValues
+                ? renewPossibleValues(a)
+                : null,
+          ),
+        ),
+      );
     }
   }
 
@@ -177,13 +203,24 @@ function instantiate(
 
 export interface SolverResult {
   state: Map<Place, PossibleValues>;
+  constraints: Constraint[];
   instantiate: (atLevel: number) => InstantiateResult;
+}
+
+export interface CallResolutionContext {
+  /** function node → param places, return place, level */
+  functions: Map<any, { params: Place[]; returnVar: Place; level: number }>;
+  /** function node → its solved result (for cross-SCC instantiation) */
+  solutions: Map<any, SolverResult>;
+  /** functions in the current SCC (same-SCC calls wire directly, no instantiation) */
+  currentScc: Set<any>;
 }
 
 // assuming trivial subset transfer function
 export function solve(
   constraints: Constraint[],
   state: Map<Place, PossibleValues> = new Map(),
+  callCtx?: CallResolutionContext,
 ): SolverResult {
   const nextIterations = new Map<Place, Constraint[]>();
   function addConstraintToNextIterations(rhs: Place, constraint: Constraint) {
@@ -194,6 +231,14 @@ export function solve(
       nextIterations.set(rhs, [constraint]);
     }
   }
+
+  // track how many times each callee solution has been instantiated
+  // to prevent unbounded instantiation chains (e.g. mutual recursion)
+  // keyed on the SolverResult object — functions in the same SCC share one
+  const instantiationCount = new Map<SolverResult, number>();
+  // track which (CallConstraint instance, callee function) pairs we've wired
+  // use a Map<CallConstraint, Set<FunctionExpr>> for object-identity dedup
+  const wiredCalls = new Map<CallConstraint, Set<FunctionExpr>>();
 
   for (const constraint of constraints) {
     if (
@@ -217,6 +262,10 @@ export function solve(
       if (constraint.rhs instanceof Place) {
         addConstraintToNextIterations(constraint.rhs, constraint);
       }
+    } else if (constraint instanceof CallConstraint) {
+      // result = callee(...args)
+      // if callee updates, we want to wire params/return
+      addConstraintToNextIterations(constraint.callee, constraint);
     }
   }
 
@@ -258,6 +307,105 @@ export function solve(
         const baseIndexed = base.field(constraint.field);
         for (const place of baseIndexed) {
           doSubsetFlow(place, constraint.rhs);
+        }
+      } else if (constraint instanceof CallConstraint && callCtx) {
+        // result = callee(...args)
+        // check what the callee Place points to — first in local state,
+        // then in all solutions (callee may be a captured variable from
+        // a parent scope that was solved in a different SCC)
+        let calleeValues = state.get(constraint.callee);
+        if (!calleeValues) {
+          for (const solution of callCtx.solutions.values()) {
+            const sv = solution.state.get(constraint.callee);
+            if (sv && sv.functions.size > 0) {
+              calleeValues = sv;
+              break;
+            }
+          }
+        }
+        if (!calleeValues) continue;
+
+        for (const calleeFn of calleeValues.functions) {
+          // deduplicate: don't wire the same (constraint instance, callee) pair twice
+          // use object identity, not string names
+          let wiredSet = wiredCalls.get(constraint);
+          if (!wiredSet) {
+            wiredSet = new Set();
+            wiredCalls.set(constraint, wiredSet);
+          }
+          if (wiredSet.has(calleeFn)) continue;
+          wiredSet.add(calleeFn);
+
+          const fnInfo = callCtx.functions.get(calleeFn);
+          if (!fnInfo) continue;
+
+          if (callCtx.currentScc.has(calleeFn)) {
+            // same SCC: wire directly to original params/return
+            for (let i = 0; i < constraint.args.length; i++) {
+              const arg = constraint.args[i];
+              if (arg) {
+                const newConstraint = new SubsetConstraint(fnInfo.params[i], arg);
+                constraints.push(newConstraint);
+                if (arg instanceof Place) {
+                  addConstraintToNextIterations(arg, newConstraint);
+                }
+                nextTransitionsForThisIteration.add(newConstraint);
+              }
+            }
+            const retConstraint = new SubsetConstraint(constraint.result, fnInfo.returnVar);
+            constraints.push(retConstraint);
+            addConstraintToNextIterations(fnInfo.returnVar, retConstraint);
+            nextTransitionsForThisIteration.add(retConstraint);
+          } else {
+            // cross-SCC: instantiate callee's solution
+            const calleeSolution = callCtx.solutions.get(calleeFn);
+            if (!calleeSolution) continue;
+            const count = instantiationCount.get(calleeSolution) ?? 0;
+            if (count >= 2) continue; // prevent unbounded instantiation chains
+            instantiationCount.set(calleeSolution, count + 1);
+
+            const inst = calleeSolution.instantiate(fnInfo.level);
+
+            // wire args → instantiated params
+            for (let i = 0; i < constraint.args.length; i++) {
+              const arg = constraint.args[i];
+              const param = inst.rewrite.get(fnInfo.params[i]) ?? fnInfo.params[i];
+              if (arg) {
+                const newConstraint = new SubsetConstraint(param, arg);
+                constraints.push(newConstraint);
+                if (arg instanceof Place) {
+                  addConstraintToNextIterations(arg, newConstraint);
+                }
+                nextTransitionsForThisIteration.add(newConstraint);
+              }
+            }
+
+            // include callee's body constraints
+            for (const c of inst.newConstraints) {
+              constraints.push(c);
+              nextTransitionsForThisIteration.add(c);
+              // register for future iterations
+              if (c instanceof SubsetConstraint && c.rhs instanceof Place) {
+                addConstraintToNextIterations(c.rhs, c);
+              } else if (c instanceof FieldLoadConstraint) {
+                addConstraintToNextIterations(c.base, c);
+              } else if (c instanceof FieldStoreConstraint) {
+                addConstraintToNextIterations(c.base, c);
+                if (c.rhs instanceof Place) {
+                  addConstraintToNextIterations(c.rhs, c);
+                }
+              } else if (c instanceof CallConstraint) {
+                addConstraintToNextIterations(c.callee, c);
+              }
+            }
+
+            // wire instantiated return → result
+            const returnVar = inst.rewrite.get(fnInfo.returnVar) ?? fnInfo.returnVar;
+            const retConstraint = new SubsetConstraint(constraint.result, returnVar);
+            constraints.push(retConstraint);
+            addConstraintToNextIterations(returnVar, retConstraint);
+            nextTransitionsForThisIteration.add(retConstraint);
+          }
         }
       }
     }
@@ -330,12 +478,18 @@ export function solve(
 
   return {
     state,
+    constraints,
     instantiate: (atLevel: number) => {
-      const inst = instantiate([...remainingEquations], atLevel);
-      for (const [oldPlace, values] of state) {
-        const place = inst.rewrite.get(oldPlace) ?? oldPlace;
-        inst.newConstraints.push(new SubsetConstraint(place, values));
+      // include state entries as SubsetConstraints so PossibleValues
+      // get their AbstractObjects cloned through renewPossibleValues too
+      const stateConstraints: Constraint[] = [];
+      for (const [place, values] of state) {
+        stateConstraints.push(new SubsetConstraint(place, values));
       }
+      const inst = instantiate(
+        [...remainingEquations, ...stateConstraints],
+        atLevel,
+      );
       return inst;
     },
   };

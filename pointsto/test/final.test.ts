@@ -211,18 +211,19 @@ describe("mutual recursion", () => {
       let isEven = null;
       let isOdd = null;
       isEven = (n) => {
-        return isOdd(n);
+        let r = isOdd(n);
+        return n;
       };
       isOdd = (n) => {
-        return isEven(n);
+        let r = isEven(n);
+        return n;
       };
       let obj = {};
       let result = isEven(obj);
     `);
-    // result flows through both functions
-    const set = r.get("result");
-    expect(set).toBeDefined();
-    expect(set!.size).toBeGreaterThan(0);
+    // obj flows into isEven.n, then into isOdd.n via the call,
+    // and both functions return n, so result gets obj
+    expectPointsTo(r, "result", "obj@12");
   });
 });
 
@@ -249,7 +250,7 @@ describe("multi-step discovery", () => {
       let obj = {};
       let out = result.f(obj);
     `);
-    expectPointsTo(r, "out", "obj@5");
+    expectPointsTo(r, "out", "obj@6");
   });
 
   it("discovers call target through two levels of indirection", () => {
@@ -278,7 +279,7 @@ describe("multi-step discovery", () => {
       let target = {};
       let result = a(() => { return target; });
     `);
-    expectPointsTo(r, "result", "obj@7");
+    expectPointsTo(r, "result", "obj@8");
   });
 });
 
