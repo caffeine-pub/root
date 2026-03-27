@@ -206,7 +206,7 @@ export default function Home() {
     div.page {
       max-width: 860px;
       margin: 0 auto;
-      padding: 2.5rem 2rem 6rem;
+      padding: 2.5rem 2rem 4rem;
     }
 
     @media (max-width: 600px) {
