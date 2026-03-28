@@ -26,7 +26,6 @@ skipLibCheck = true
 
 [pnpm]
 minimumReleaseAge = 4320
-minimumReleaseAgeExclude = ["solid-styled", "unplugin-solid-styled"]
 
 [prettier]
 plugins = ["prettier-plugin-toml"]
