@@ -72,6 +72,7 @@ export class Arena<I extends Id<string>, T extends Poolable> {
 
   /**
    * Allocate a new object (or recycle a freed one) and initialize it.
+   * @pre create() must not throw. If it does, the arena is in an invalid state.
    */
   alloc(...args: Parameters<T["create"]>): I {
     let slot: number;
