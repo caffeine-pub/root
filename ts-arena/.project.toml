@@ -1,0 +1,10 @@
+[package]
+name = "ts-arena"
+version = "0.1.0"
+
+[package.devDependencies]
+vitest = "^4.1.0"
+
+[tsconfig.compilerOptions]
+outDir = "dist"
+rootDir = "."
