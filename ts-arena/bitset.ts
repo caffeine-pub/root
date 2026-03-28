@@ -10,6 +10,7 @@ export class BitSet {
 
   /**
    * Ensure the bitset can hold at least `index + 1` bits.
+   * @pre index is a non-negative integer
    */
   resize(index: number): void {
     const needed = (index >>> 5) + 1;
@@ -24,6 +25,7 @@ export class BitSet {
 
   /**
    * Set the bit at index to true.
+   * @pre index is a non-negative integer
    */
   add(index: number): void {
     this.resize(index);
@@ -32,6 +34,7 @@ export class BitSet {
 
   /**
    * Set the bit at index to false.
+   * @pre index is a non-negative integer
    */
   remove(index: number): void {
     if ((index >>> 5) < this.words.length) {
@@ -41,6 +44,7 @@ export class BitSet {
 
   /**
    * Is the bit at index true?
+   * @pre index is a non-negative integer
    */
   has(index: number): boolean {
     return (this.words[index >>> 5] & (1 << index)) !== 0;

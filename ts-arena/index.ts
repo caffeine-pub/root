@@ -39,7 +39,10 @@ export type PoolableConstructor<T extends Poolable> = new () => T;
 // ---- Arena options ----
 
 export interface ArenaOptions {
-  /** Pre-allocate this many slots up front */
+  /**
+   * Pre-allocate this many slots up front.
+   * @pre capacity is a non-negative integer
+   */
   capacity?: number;
 }
 
