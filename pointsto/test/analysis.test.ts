@@ -46,130 +46,130 @@ function expectFunctions(
 describe("basic assignments", () => {
   it("tracks object allocation", () => {
     const state = run(`
-      let a = {};
+      let a = 'a: {};
     `);
-    expectObjects(state, "a", "obj@2");
+    expectObjects(state, "a", "a");
   });
 
   it("tracks function allocation", () => {
     const state = run(`
-      let f = () => { return null; };
+      let f = 'f: () => { return null; };
     `);
-    expectFunctions(state, "f", "fn@2");
+    expectFunctions(state, "f", "f");
   });
 
   it("tracks variable-to-variable flow", () => {
     const state = run(`
-      let a = {};
+      let a = 'a: {};
       let b = a;
     `);
-    expectObjects(state, "a", "obj@2");
-    expectObjects(state, "b", "obj@2");
+    expectObjects(state, "a", "a");
+    expectObjects(state, "b", "a");
   });
 
   it("tracks multiple assignments (flow-insensitive)", () => {
     const state = run(`
-      let a = {};
-      let b = {};
+      let a = 'a: {};
+      let b = 'b: {};
       let x = a;
       x = b;
     `);
-    expectObjects(state, "x", "obj@2", "obj@3");
+    expectObjects(state, "x", "a", "b");
   });
 });
 
 describe("object fields", () => {
   it("tracks field initialized in literal", () => {
     const state = run(`
-      let f = () => { return null; };
-      let obj = { handler: f };
+      let f = 'f: () => { return null; };
+      let obj = 'obj: { handler: f };
       let g = obj.handler;
     `);
-    expectFunctions(state, "g", "fn@2");
+    expectFunctions(state, "g", "f");
   });
 
   it("tracks field store then load", () => {
     const state = run(`
-      let obj = {};
-      let f = () => { return null; };
+      let obj = 'obj: {};
+      let f = 'f: () => { return null; };
       obj.handler = f;
       let g = obj.handler;
     `);
-    expectFunctions(state, "g", "fn@3");
+    expectFunctions(state, "g", "f");
   });
 
   it("distinguishes fields on the same object", () => {
     const state = run(`
-      let a = () => { return null; };
-      let b = () => { return null; };
-      let obj = { x: a, y: b };
+      let a = 'a: () => { return null; };
+      let b = 'b: () => { return null; };
+      let obj = 'obj: { x: a, y: b };
       let ra = obj.x;
       let rb = obj.y;
     `);
-    expectFunctions(state, "ra", "fn@2");
-    expectFunctions(state, "rb", "fn@3");
+    expectFunctions(state, "ra", "a");
+    expectFunctions(state, "rb", "b");
   });
 
   it("distinguishes fields on different objects", () => {
     const state = run(`
-      let a = () => { return null; };
-      let b = () => { return null; };
-      let obj1 = { f: a };
-      let obj2 = { f: b };
+      let a = 'a: () => { return null; };
+      let b = 'b: () => { return null; };
+      let obj1 = 'obj1: { f: a };
+      let obj2 = 'obj2: { f: b };
       let ra = obj1.f;
       let rb = obj2.f;
     `);
-    expectFunctions(state, "ra", "fn@2");
-    expectFunctions(state, "rb", "fn@3");
+    expectFunctions(state, "ra", "a");
+    expectFunctions(state, "rb", "b");
   });
 
   it("handles store after load (order independence)", () => {
     // flow-insensitive: load should still see the store
     const state = run(`
-      let obj = {};
+      let obj = 'obj: {};
       let g = obj.handler;
-      let f = () => { return null; };
+      let f = 'f: () => { return null; };
       obj.handler = f;
     `);
-    expectFunctions(state, "g", "fn@4");
+    expectFunctions(state, "g", "f");
   });
 
   it("handles nested field access", () => {
     const state = run(`
-      let inner = { val: () => { return null; } };
-      let outer = { nested: inner };
+      let inner = 'inner: { val: 'v: () => { return null; } };
+      let outer = 'outer: { nested: inner };
       let f = outer.nested.val;
     `);
-    expectFunctions(state, "f", "fn@2");
+    expectFunctions(state, "f", "v");
   });
 });
 
 describe("multiple objects through one variable", () => {
   it("field load sees fields from all pointed-to objects", () => {
     const state = run(`
-      let a = { f: () => { return null; } };
-      let b = { f: () => { return null; } };
+      let a = 'a: { f: 'af: () => { return null; } };
+      let b = 'b: { f: 'bf: () => { return null; } };
       let x = a;
       x = b;
       let result = x.f;
     `);
     // x points to both objects, so x.f should have both functions
-    expectFunctions(state, "result", "fn@2", "fn@3");
+    expectFunctions(state, "result", "af", "bf");
   });
 
   it("field store writes to all pointed-to objects", () => {
     const state = run(`
-      let a = {};
-      let b = {};
+      let a = 'a: {};
+      let b = 'b: {};
       let x = a;
       x = b;
-      let f = () => { return null; };
+      let f = 'f: () => { return null; };
       x.handler = f;
       let ra = a.handler;
       let rb = b.handler;
     `);
     // both a and b should have handler set
-    expectFunctions(state, "ra", "fn@6");
-    expectFunctions(state, "rb", "fn@6");
+    expectFunctions(state, "ra", "f");
+    expectFunctions(state, "rb", "f");
   });
 });

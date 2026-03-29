@@ -31,125 +31,125 @@ function expectPointsTo(
 describe("direct assignments", () => {
   it("tracks a single closure", () => {
     const r = pointsTo(`
-      let f = () => { return {}; };
+      let f = 'f: () => { return 'o: {}; };
     `);
-    expectPointsTo(r, "f", "fn@2");
+    expectPointsTo(r, "f", "f");
   });
 
   it("tracks object allocation", () => {
     const r = pointsTo(`
-      let o = { x: null };
+      let o = 'o: { x: null };
     `);
-    expectPointsTo(r, "o", "obj@2");
+    expectPointsTo(r, "o", "o");
   });
 
   it("tracks variable-to-variable copy", () => {
     const r = pointsTo(`
-      let f = () => { return {}; };
+      let f = 'f: () => { return 'o: {}; };
       let g = f;
     `);
-    expectPointsTo(r, "f", "fn@2");
-    expectPointsTo(r, "g", "fn@2");
+    expectPointsTo(r, "f", "f");
+    expectPointsTo(r, "g", "f");
   });
 });
 
 describe("field sensitivity", () => {
   it("tracks function stored in object field", () => {
     const r = pointsTo(`
-      let handler = (x) => { return x; };
-      let obj = { f: handler };
+      let handler = 'handler: (x) => { return x; };
+      let obj = 'obj: { f: handler };
       let g = obj.f;
     `);
-    expectPointsTo(r, "g", "fn@2");
+    expectPointsTo(r, "g", "handler");
   });
 
   it("tracks field assignment after construction", () => {
     const r = pointsTo(`
-      let obj = {};
-      let handler = (x) => { return x; };
+      let obj = 'obj: {};
+      let handler = 'handler: (x) => { return x; };
       obj.f = handler;
       let g = obj.f;
     `);
-    expectPointsTo(r, "g", "fn@3");
+    expectPointsTo(r, "g", "handler");
   });
 
   it("tracks nested field access", () => {
     const r = pointsTo(`
-      let inner = { val: () => { return {}; } };
-      let outer = { nested: inner };
+      let inner = 'inner: { val: 'v: () => { return 'o: {}; } };
+      let outer = 'outer: { nested: inner };
       let f = outer.nested.val;
     `);
-    expectPointsTo(r, "f", "fn@2");
+    expectPointsTo(r, "f", "v");
   });
 });
 
 describe("call graph discovery", () => {
   it("discovers direct call return value", () => {
     const r = pointsTo(`
-      let make = () => {
-        return () => { return {}; };
+      let make = 'make: () => {
+        return 'inner: () => { return 'o: {}; };
       };
       let f = make();
     `);
-    expectPointsTo(r, "f", "fn@3");
+    expectPointsTo(r, "f", "inner");
   });
 
   it("discovers higher-order function call", () => {
     const r = pointsTo(`
-      let apply = (f, x) => {
+      let apply = 'apply: (f, x) => {
         return f(x);
       };
-      let id = (x) => { return x; };
-      let obj = {};
+      let id = 'id: (x) => { return x; };
+      let obj = 'obj: {};
       let result = apply(id, obj);
     `);
-    expectPointsTo(r, "result", "obj@6");
+    expectPointsTo(r, "result", "obj");
   });
 
   it("discovers multi-step call chain", () => {
     const r = pointsTo(`
-      let wrap = (x) => {
-        return { val: x };
+      let wrap = 'wrap: (x) => {
+        return 'w: { val: x };
       };
-      let unwrap = (o) => {
+      let unwrap = 'unwrap: (o) => {
         return o.val;
       };
-      let f = () => { return {}; };
+      let f = 'f: () => { return 'o: {}; };
       let w = wrap(f);
       let g = unwrap(w);
     `);
-    expectPointsTo(r, "g", "fn@8");
+    expectPointsTo(r, "g", "f");
   });
 });
 
 describe("closures and captures", () => {
   it("tracks captured variable through closure", () => {
     const r = pointsTo(`
-      let x = {};
-      let f = () => { return x; };
+      let x = 'x: {};
+      let f = 'f: () => { return x; };
       let result = f();
     `);
-    expectPointsTo(r, "result", "obj@2");
+    expectPointsTo(r, "result", "x");
   });
 
   it("tracks factory pattern", () => {
     const r = pointsTo(`
-      let makeHandler = (h) => {
-        return () => { return h; };
+      let makeHandler = 'makeHandler: (h) => {
+        return 'inner: () => { return h; };
       };
-      let myFn = () => { return {}; };
+      let myFn = 'myFn: () => { return 'o: {}; };
       let wrapped = makeHandler(myFn);
       let result = wrapped();
     `);
-    expectPointsTo(r, "result", "fn@5");
+    expectPointsTo(r, "result", "myFn");
   });
 });
 
 describe("branches", () => {
   it("merges points-to sets from both branches", () => {
     const r = pointsTo(`
-      let a = () => { return {}; };
-      let b = () => { return {}; };
+      let a = 'a: () => { return 'o: {}; };
+      let b = 'b: () => { return 'o2: {}; };
       let f = null;
       if {
         f = a;
@@ -157,45 +157,45 @@ describe("branches", () => {
         f = b;
       }
     `);
-    expectPointsTo(r, "f", "fn@2", "fn@3");
+    expectPointsTo(r, "f", "a", "b");
   });
 
   it("handles conditional call targets", () => {
     const r = pointsTo(`
-      let a = (x) => { return x; };
-      let b = (x) => { return x; };
+      let a = 'a: (x) => { return x; };
+      let b = 'b: (x) => { return x; };
       let f = null;
       if {
         f = a;
       } else {
         f = b;
       }
-      let obj = {};
+      let obj = 'obj: {};
       let result = f(obj);
     `);
-    expectPointsTo(r, "result", "obj@10");
+    expectPointsTo(r, "result", "obj");
   });
 });
 
 describe("loops", () => {
   it("reaches fixpoint through loop", () => {
     const r = pointsTo(`
-      let a = {};
-      let b = {};
+      let a = 'a: {};
+      let b = 'b: {};
       let x = a;
       loop {
         x = b;
         break;
       }
     `);
-    expectPointsTo(r, "x", "obj@2", "obj@3");
+    expectPointsTo(r, "x", "a", "b");
   });
 
   it("handles function built in a loop", () => {
     const r = pointsTo(`
       let last = null;
       loop {
-        last = () => { return {}; };
+        last = 'f: () => { return 'o: {}; };
         break;
       }
     `);
@@ -210,20 +210,20 @@ describe("mutual recursion", () => {
     const r = pointsTo(`
       let isEven = null;
       let isOdd = null;
-      isEven = (n) => {
+      isEven = 'isEven: (n) => {
         let r = isOdd(n);
         return n;
       };
-      isOdd = (n) => {
+      isOdd = 'isOdd: (n) => {
         let r = isEven(n);
         return n;
       };
-      let obj = {};
+      let obj = 'obj: {};
       let result = isEven(obj);
     `);
     // obj flows into isEven.n, then into isOdd.n via the call,
     // and both functions return n, so result gets obj
-    expectPointsTo(r, "result", "obj@12");
+    expectPointsTo(r, "result", "obj");
   });
 });
 
@@ -232,7 +232,7 @@ describe("forward declarations", () => {
     const r = pointsTo(`
       let f = null;
       let result = f();
-      f = () => { return {}; };
+      f = 'f: () => { return 'o: {}; };
     `);
     const set = r.get("result");
     expect(set).toBeDefined();
@@ -243,56 +243,56 @@ describe("forward declarations", () => {
 describe("multi-step discovery", () => {
   it("discovers call target through field read after call graph update", () => {
     const r = pointsTo(`
-      let getHandler = () => {
-        return { f: (x) => { return x; } };
+      let getHandler = 'getHandler: () => {
+        return 'obj: { f: 'handler: (x) => { return x; } };
       };
       let result = getHandler();
-      let obj = {};
+      let obj = 'obj2: {};
       let out = result.f(obj);
     `);
-    expectPointsTo(r, "out", "obj@6");
+    expectPointsTo(r, "out", "obj2");
   });
 
   it("discovers call target through two levels of indirection", () => {
     const r = pointsTo(`
-      let make = () => {
-        return (x) => { return x; };
+      let make = 'make: () => {
+        return 'id: (x) => { return x; };
       };
-      let apply = (f, x) => {
+      let apply = 'apply: (f, x) => {
         return f(x);
       };
       let fn = make();
-      let obj = {};
+      let obj = 'obj: {};
       let result = apply(fn, obj);
     `);
-    expectPointsTo(r, "result", "obj@9");
+    expectPointsTo(r, "result", "obj");
   });
 
   it("callback passed through multiple hops", () => {
     const r = pointsTo(`
-      let a = (cb) => {
+      let a = 'a: (cb) => {
         return b(cb);
       };
-      let b = (cb) => {
+      let b = 'b: (cb) => {
         return cb();
       };
-      let target = {};
-      let result = a(() => { return target; });
+      let target = 'target: {};
+      let result = a('cb: () => { return target; });
     `);
-    expectPointsTo(r, "result", "obj@8");
+    expectPointsTo(r, "result", "target");
   });
 });
 
 describe("tree recursion", () => {
   it("handles tree-like recursive structure", () => {
     const r = pointsTo(`
-      let makeNode = (l, r) => {
-        return { left: l, right: r };
+      let makeNode = 'makeNode: (l, r) => {
+        return 'node: { left: l, right: r };
       };
-      let leaf = {};
+      let leaf = 'leaf: {};
       let tree = makeNode(makeNode(leaf, leaf), leaf);
       let leftLeft = tree.left.left;
     `);
-    expectPointsTo(r, "leftLeft", "obj@5");
+    expectPointsTo(r, "leftLeft", "leaf");
   });
 });

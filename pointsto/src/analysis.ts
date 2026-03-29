@@ -49,11 +49,14 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
     // phase 1: solve all SCCs
     const iterations: Iteration[] = [];
     for (const scc of sccs) {
-      debug("\nSCC:", scc);
+      debug(
+        "\nprocessing SCC:",
+        scc.map((n) => n.hash),
+      );
 
       const iteration = new Iteration(placeMap, scc, solutions);
       const constraints = iteration.run();
-      debug(constraints);
+      // debug(constraints);
       const solution = solve(constraints);
 
       for (const fn of scc) {
@@ -141,8 +144,6 @@ class Iteration {
     return this.constraints;
   }
 
-
-
   stmt(stmt: Stmt): boolean {
     switch (stmt.kind) {
       case "expr":
@@ -183,11 +184,15 @@ class Iteration {
       case "break":
         return false;
       case "return": {
+        debug("processing return at line", stmt.line);
         if (stmt.value) {
           const fnInfo = this.placeMap.functions.get(this.currentFunction)!;
           const expr = this.expr(stmt.value);
-          if (expr)
-            this.constraints.push(new SubsetConstraint(fnInfo.returnVar, expr));
+          this.constraints.push(new SubsetConstraint(fnInfo.returnVar, expr));
+          debug(
+            "we're wiring this up to the return for",
+            this.currentFunction.hash,
+          );
         }
         return false;
       }
@@ -201,7 +206,7 @@ class Iteration {
     }
   }
 
-  expr(expr: Expr): Place | PossibleValues | null {
+  expr(expr: Expr): Place | PossibleValues {
     switch (expr.kind) {
       case "ident":
       case "function": {
@@ -209,7 +214,7 @@ class Iteration {
       }
       case "number":
       case "null":
-        return null;
+        return new PossibleValues();
       case "object": {
         const result = this.placeMap.exprResolution.get(expr)!;
 
@@ -221,7 +226,7 @@ class Iteration {
         for (const prop of expr.properties) {
           const fieldVar = object.field(prop.key);
           const rhs = this.expr(prop.value);
-          if (rhs) this.constraints.push(new SubsetConstraint(fieldVar, rhs));
+          this.constraints.push(new SubsetConstraint(fieldVar, rhs));
         }
 
         // theoretically we could optimize this at all depths
@@ -230,125 +235,111 @@ class Iteration {
         return result;
       }
       case "call": {
-        const place = this.placeMap.exprResolution.get(expr)! as Place;
+        debug("processing call @ line", expr.line);
         const callee = this.expr(expr.callee);
+        debug("got callee for call", callee);
+        const place = this.placeMap.exprResolution.get(expr)! as Place;
+        debug("we're assigning to", place);
 
+        let possibleCallees = null;
         if (callee instanceof PossibleValues) {
-          // direct call — we know the callee statically
-          for (const calleeFn of callee.functions) {
-            this.directCallEdges.push([this.currentFunction, calleeFn]);
-            const fnInfo = this.placeMap.functions.get(calleeFn)!;
-            if (this.functions.includes(calleeFn)) {
-              // same SCC: wire params/return directly
-              const paramCount = Math.min(expr.args.length, fnInfo.params.length);
-              for (let i = 0; i < paramCount; i++) {
-                const arg = this.expr(expr.args[i]);
-                if (arg)
-                  this.constraints.push(
-                    new SubsetConstraint(fnInfo.params[i], arg),
-                  );
-              }
-              this.constraints.push(
-                new SubsetConstraint(place, fnInfo.returnVar),
-              );
-            } else {
-              // cross-SCC: instantiate
-              const calleeSolution = assert(this.solutions.get(calleeFn));
-              const instantiated = calleeSolution.instantiate(fnInfo.level);
-
-              const paramCount2 = Math.min(expr.args.length, fnInfo.params.length);
-              for (let i = 0; i < paramCount2; i++) {
-                const arg = this.expr(expr.args[i]);
-                const param =
-                  instantiated.rewrite.get(fnInfo.params[i]) ??
-                  fnInfo.params[i];
-                if (arg)
-                  this.constraints.push(new SubsetConstraint(param, arg));
-              }
-
-              this.constraints.push(...instantiated.newConstraints);
-
-              const returnVar =
-                instantiated.rewrite.get(fnInfo.returnVar) ?? fnInfo.returnVar;
-              this.constraints.push(new SubsetConstraint(place, returnVar));
-            }
-          }
-        } else if (callee instanceof Place) {
-          // indirect call — callee is a Place
-          // check if we already know what it points to from a previous iteration
-          let resolvedFunctions: Set<FunctionExpr> | undefined;
-          for (const solution of this.solutions.values()) {
-            const sv = solution.state.get(callee);
-            if (sv && sv.functions.size > 0) {
-              resolvedFunctions = sv.functions;
-              break;
-            }
-          }
-
-          if (resolvedFunctions) {
-            // we know the callees — wire them like direct calls
-            for (const calleeFn of resolvedFunctions) {
-              const fnInfo = this.placeMap.functions.get(calleeFn)!;
-              if (!fnInfo) continue;
-              if (this.functions.includes(calleeFn)) {
-                // same SCC: wire params/return directly
-                const paramCount = Math.min(expr.args.length, fnInfo.params.length);
-                for (let i = 0; i < paramCount; i++) {
-                  const arg = this.expr(expr.args[i]);
-                  if (arg)
-                    this.constraints.push(
-                      new SubsetConstraint(fnInfo.params[i], arg),
-                    );
-                }
-                this.constraints.push(
-                  new SubsetConstraint(place, fnInfo.returnVar),
-                );
-              } else {
-                // cross-SCC: instantiate
-                const calleeSolution = this.solutions.get(calleeFn);
-                if (!calleeSolution) continue;
-                const instantiated = calleeSolution.instantiate(fnInfo.level);
-
-                const paramCount2 = Math.min(expr.args.length, fnInfo.params.length);
-                for (let i = 0; i < paramCount2; i++) {
-                  const arg = this.expr(expr.args[i]);
-                  const param =
-                    instantiated.rewrite.get(fnInfo.params[i]) ??
-                    fnInfo.params[i];
-                  if (arg)
-                    this.constraints.push(new SubsetConstraint(param, arg));
-                }
-
-                this.constraints.push(...instantiated.newConstraints);
-
-                const returnVar =
-                  instantiated.rewrite.get(fnInfo.returnVar) ?? fnInfo.returnVar;
-                this.constraints.push(new SubsetConstraint(place, returnVar));
-              }
-            }
-          }
-
-          // always emit a CallConstraint so the solver can discover
-          // new callees and the outer loop can update the callgraph
-          const argPlaces: (Place | PossibleValues | null)[] = [];
-          for (let i = 0; i < expr.args.length; i++) {
-            argPlaces.push(this.expr(expr.args[i]));
-          }
-          this.constraints.push(
-            new CallConstraint(place, callee, argPlaces),
+          possibleCallees = callee.functions;
+          debug(
+            "we know the functions statically",
+            [...callee.functions].map((n) => n.hash),
           );
+        } else if (callee instanceof Place) {
+          // check ALL solutions — a param like `f` in `apply(f, x)`
+          // only gets its value through instantiation in the caller's
+          // constraint set, not in the callee's own solution
+          const combined = new Set<FunctionExpr>();
+          for (const solution of this.solutions.values()) {
+            const exists = solution.state.get(callee);
+            if (exists) {
+              for (const fn of exists.functions) combined.add(fn);
+            }
+          }
+          debug(
+            "for the previous solutions we have",
+            [...combined].map((n) => n.hash),
+          );
+          if (combined.size > 0) {
+            possibleCallees = combined;
+          } else {
+            debug("we're emitting a callconstraint and leaving it be");
+            const argPlaces: (Place | PossibleValues | null)[] = [];
+            for (let i = 0; i < expr.args.length; i++) {
+              argPlaces.push(this.expr(expr.args[i]));
+            }
+            this.constraints.push(new CallConstraint(place, callee, argPlaces));
+          }
+        }
+
+        if (possibleCallees) {
+          for (const calleeFn of possibleCallees) {
+            const fnInfo = this.placeMap.functions.get(calleeFn)!;
+            // if (this.functions.includes(calleeFn)) {
+            debug("we're wiring up", calleeFn.hash, "in this call");
+            // params
+            for (let i = 0; i < expr.args.length; i++) {
+              const arg = this.expr(expr.args[i]);
+              if (arg)
+                this.constraints.push(
+                  new SubsetConstraint(fnInfo.params[i], arg),
+                );
+            }
+
+            // return value
+            this.constraints.push(
+              new SubsetConstraint(place, fnInfo.returnVar),
+            );
+            // } else {
+            // TODO: instantiation needs to be done for context sensitivity
+            // debug("we're instantiating", calleeFn.hash, "in this call");
+            // // instantiate
+            // const calleeSolution = assert(this.solutions.get(calleeFn));
+            // const instantiated = calleeSolution.instantiate(fnInfo.level);
+
+            // // TODO: cache these instantiations
+
+            // // params
+            // for (let i = 0; i < expr.args.length; i++) {
+            //   const arg = this.expr(expr.args[i]);
+            //   const param =
+            //     instantiated.rewrite.get(fnInfo.params[i]) ??
+            //     fnInfo.params[i];
+            //   if (arg)
+            //     this.constraints.push(new SubsetConstraint(param, arg));
+            // }
+
+            // // function body
+            // this.constraints.push(...instantiated.newConstraints);
+
+            // // return value
+            // const returnVar =
+            //   instantiated.rewrite.get(fnInfo.returnVar) ?? fnInfo.returnVar;
+            // this.constraints.push(new SubsetConstraint(place, returnVar));
+            // }
+          }
         }
 
         return place;
       }
       case "member": {
-        const place = this.placeMap.exprResolution.get(expr)! as Place;
+        debug("processing member @ line", expr.line);
         const object = this.expr(expr.object);
+        debug("got base for member", object);
+        const place = this.placeMap.exprResolution.get(expr)! as Place;
+        debug("we're assigning to", place);
 
         if (object) {
           if (object instanceof Place) {
             this.constraints.push(
               new FieldLoadConstraint(place, object, expr.property),
+            );
+            debug(
+              "since base is a place, we inserted a field load",
+              expr.property,
             );
           } else {
             // so we just received, let's say, an object,
@@ -356,6 +347,11 @@ class Iteration {
             // { foo: 1 }.foo
             // we know the place of obj { foo } for sure, so we'll just use that
             // and flow the values of obj { foo } into the place of obj.foo
+            debug(
+              "since object can be unrolled, we flowed just",
+              expr.property,
+              "into the place",
+            );
             for (const objectFieldPlace of object.field(expr.property)) {
               this.constraints.push(
                 new SubsetConstraint(place, objectFieldPlace),
@@ -371,20 +367,24 @@ class Iteration {
         return place;
       }
       case "assign": {
+        debug("processing assignment @ line", expr.line);
         const value = this.expr(expr.value);
         if (!value) return value;
         if (expr.target.kind === "ident") {
           const toVariable = this.placeMap.exprResolution.get(
             expr.target,
           )! as Place;
+          debug("we're doing a direct assignment", toVariable, "=", value);
           this.constraints.push(new SubsetConstraint(toVariable, value));
         } else if (expr.target.kind === "member") {
           const base = this.expr(expr.target.object);
+          debug("found the base of the member assignment", base);
           if (base) {
             if (base instanceof Place) {
               this.constraints.push(
                 new FieldStoreConstraint(base, expr.target.property, value),
               );
+              debug("doing a field store constraint since base is a place");
             } else {
               // we might as well
               // { foo: 1 }.foo = 2;
@@ -393,6 +393,9 @@ class Iteration {
                   new SubsetConstraint(baseFieldPlace, value),
                 );
               }
+              debug(
+                "simplifying the field store since the object is statically known",
+              );
             }
           } else {
             console.warn(

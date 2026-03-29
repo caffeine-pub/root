@@ -27,9 +27,13 @@ describe("lexer", () => {
   });
 
   it("lexes strings", () => {
-    const tokens = lex('"hello" \'world\'');
+    const tokens = lex('"hello"');
     expect(tokens[0]!.value).toBe("hello");
-    expect(tokens[1]!.value).toBe("world");
+  });
+
+  it("lexes labels", () => {
+    const tokens = lex("'abc");
+    expect(tokens[0]!.value).toBe("abc");
   });
 
   it("lexes two-char operators", () => {
@@ -69,7 +73,7 @@ describe("parser", () => {
   });
 
   it("parses arrow functions", () => {
-    const expr = firstExpr("(x) => { return x; }");
+    const expr = firstExpr("'f: (x) => { return x; }");
     expect(expr.kind).toBe("function");
     if (expr.kind === "function") {
       expect(expr.params).toEqual(["x"]);
@@ -77,7 +81,7 @@ describe("parser", () => {
   });
 
   it("parses no-param arrow", () => {
-    const expr = firstExpr("() => { return 1; }");
+    const expr = firstExpr("'f: () => { return 1; }");
     expect(expr.kind).toBe("function");
     if (expr.kind === "function") {
       expect(expr.params).toEqual([]);
@@ -85,7 +89,7 @@ describe("parser", () => {
   });
 
   it("parses arrow via let + assignment", () => {
-    const prog = p("let foo = (a, b) => { return a; };");
+    const prog = p("let foo = 'f: (a, b) => { return a; };");
     const stmt = prog.body[0]!;
     expect(stmt.kind).toBe("let");
     if (stmt.kind === "let") {
@@ -98,7 +102,7 @@ describe("parser", () => {
   });
 
   it("parses forward declarations", () => {
-    const prog = p("let f;\nf = (x) => { return x; };");
+    const prog = p("let f;\nf = 'g: (x) => { return x; };");
     expect(prog.body).toHaveLength(2);
     const decl = prog.body[0]!;
     expect(decl.kind).toBe("let");
@@ -114,7 +118,7 @@ describe("parser", () => {
   });
 
   it("parses object literals", () => {
-    const prog = p("let o = { x: 1, y: 2 };");
+    const prog = p("let o = 'obj: { x: 1, y: 2 };");
     const stmt = prog.body[0]!;
     expect(stmt.kind).toBe("let");
     if (stmt.kind === "let") {
@@ -128,7 +132,7 @@ describe("parser", () => {
   });
 
   it("parses shorthand properties", () => {
-    const prog = p("let x = 1; let o = { x };");
+    const prog = p("let x = 1; let o = 'obj: { x };");
     const stmt = prog.body[1]!;
     if (stmt.kind === "let" && stmt.init?.kind === "object") {
       expect(stmt.init.properties[0]!.key).toBe("x");
@@ -192,7 +196,7 @@ describe("parser", () => {
   it("parses closures capturing variables", () => {
     const prog = p(`
       let x = 1;
-      let f = () => { return x; };
+      let f = 'f: () => { return x; };
       f();
     `);
     expect(prog.body).toHaveLength(3);
@@ -200,8 +204,8 @@ describe("parser", () => {
 
   it("parses object with function fields", () => {
     const prog = p(`
-      let obj = {
-        handler: (x) => { return x; },
+      let obj = 'obj: {
+        handler: 'h: (x) => { return x; },
         value: 42
       };
       obj.handler(1);
@@ -210,7 +214,7 @@ describe("parser", () => {
   });
 
   it("parses trailing commas in objects and calls", () => {
-    const prog = p("let o = { x: 1, y: 2, };");
+    const prog = p("let o = 'obj: { x: 1, y: 2, };");
     const stmt = prog.body[0]!;
     if (stmt.kind === "let") {
       expect(stmt.init?.kind).toBe("object");
@@ -223,7 +227,7 @@ describe("parser", () => {
   });
 
   it("parses arrow functions as arguments", () => {
-    const expr = firstExpr("foo((x) => { return x; })");
+    const expr = firstExpr("foo('f: (x) => { return x; })");
     expect(expr.kind).toBe("call");
     if (expr.kind === "call") {
       expect(expr.args[0]!.kind).toBe("function");
@@ -235,6 +239,22 @@ describe("parser", () => {
     expect(expr.kind).toBe("call");
     if (expr.kind === "call") {
       expect(expr.callee.kind).toBe("call");
+    }
+  });
+
+  it("parses labels on functions", () => {
+    const expr = firstExpr("'myFunc: (x) => { return x; }");
+    expect(expr.kind).toBe("function");
+    if (expr.kind === "function") {
+      expect(expr.hash).toBe("myFunc");
+    }
+  });
+
+  it("parses labels on objects", () => {
+    const expr = firstExpr("'myObj: { x: 1 }");
+    expect(expr.kind).toBe("object");
+    if (expr.kind === "object") {
+      expect(expr.hash).toBe("myObj");
     }
   });
 });

@@ -84,15 +84,12 @@ export function buildPlaces(program: Program): PlaceMap {
     fnNodeStack.push(node);
     const paramPlaces: Place[] = [];
     for (const name of params) {
-      const place = new Place(name, level);
+      const place = new Place(`${fnNodeStack.at(-1)!.hash}.${name}`, level);
       paramPlaces.push(place);
       scope.declare(name, place);
     }
 
-    const returnVar = new Place(
-      `return@${node.kind === "function" ? node.hash : "top"}`,
-      level,
-    );
+    const returnVar = new Place(`${node.hash}.return`, level);
 
     functions.set(node, {
       params: paramPlaces,
@@ -138,6 +135,14 @@ export function buildPlaces(program: Program): PlaceMap {
     }
   }
 
+  function humanReadable(x: Place | PossibleValues | null) {
+    if (!x) return "unknown";
+    if (x instanceof Place) return x.name;
+    const object = x.objects.values().next().value!;
+    const fn = x.functions.values().next().value;
+    return object?.name || fn?.hash;
+  }
+
   function walkExpr(expr: Expr): Place | PossibleValues | null {
     let result: Place | PossibleValues | null;
 
@@ -178,12 +183,18 @@ export function buildPlaces(program: Program): PlaceMap {
         const callee = walkExpr(expr.callee);
         for (const arg of expr.args) walkExpr(arg);
 
-        result = new Place(`call@${expr.line}`, level);
+        result = new Place(
+          `call(${humanReadable(callee)}@${expr.line})`,
+          level,
+        );
         break;
       }
       case "member": {
-        walkExpr(expr.object);
-        result = new Place(`member@${expr.line} .${expr.property}`, level);
+        const base = walkExpr(expr.object);
+        result = new Place(
+          `${humanReadable(base)}.${expr.property}@${expr.line}`,
+          level,
+        );
         break;
       }
       case "assign": {

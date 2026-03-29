@@ -118,4 +118,5 @@ export interface BlockStmt {
 export interface Program {
   kind: "program";
   body: Stmt[];
+  hash: "[program]";
 }

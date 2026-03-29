@@ -13,14 +13,9 @@ if (process.env.DEBUG) {
   const result = analyze(
     parse(
       lex(`
-    let a = (x) => {
-      return b(x);
-    };
-    let b = (y) => {
-      return y();
-    };
-    let target = {};
-    let result = a(() => { return target; });
+    let a = 'a: (f, c) => { return f(c, f); }
+    let b = 'b: (f, c) => { return f(c, f); }
+    let result = a(b, a);
   `),
     ),
   );
