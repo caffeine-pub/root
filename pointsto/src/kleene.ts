@@ -1,4 +1,14 @@
-import { FunctionExpr } from "./ast.js";
+import type { FunctionExpr, Program } from "./ast.js";
+import type { GraphNode, Instantiation } from "./callgraph.js";
+
+export type Owner = FunctionExpr | Program;
+
+/** Check if `inner` is the same as or lexically nested inside `outer` */
+export function isOwnedBy(inner: Owner, outer: Owner): boolean {
+  // Program owns everything
+  if (inner === outer) return true;
+  return false; // conservative — caller must walk the nesting chain
+}
 
 function addAllTo<T>(from: Set<T>, to: Set<T>) {
   const before = to.size;
@@ -9,11 +19,23 @@ function addAllTo<T>(from: Set<T>, to: Set<T>) {
 export class PossibleValues {
   constructor(
     public objects: Set<AbstractObject> = new Set(),
-    public functions: Set<FunctionExpr> = new Set(),
+    public functions: Set<FunctionExpr | Instantiation> = new Set(), // this has to be a linear set?
   ) {}
 
   field(index: string): Set<Place> {
     return new Set([...this.objects].map((o) => o.field(index)));
+  }
+
+  eq(other: PossibleValues): boolean {
+    if (this.objects.size !== other.objects.size) return false;
+    if (this.functions.size !== other.functions.size) return false;
+    for (const obj of this.objects) {
+      if (!other.objects.has(obj)) return false;
+    }
+    for (const fn of this.functions) {
+      if (!other.functions.has(fn)) return false;
+    }
+    return true;
   }
 
   addAll(other: PossibleValues) {
@@ -27,20 +49,20 @@ export class AbstractObject {
   private cache?: Map<string, Place>;
   constructor(
     public name: string,
-    public level: number,
+    public owner: Owner,
   ) {}
 
   field(index: string): Place {
     this.cache ??= new Map();
     const exists = this.cache.get(index);
     if (exists) return exists;
-    const result = new Place(`${this.name}.${index}`, this.level);
+    const result = new Place(`${this.name}.${index}`, this.owner);
     this.cache.set(index, result);
     return result;
   }
 
-  clone(lookup: (p: Place) => Place) {
-    const newObject = new AbstractObject(`${this.name}_instant`, this.level);
+  clone(lookup: (p: Place) => Place, newOwner: Owner) {
+    const newObject = new AbstractObject(`${this.name}_instant`, newOwner);
 
     if (this.cache) {
       const newCache = new Map<string, Place>();
@@ -58,7 +80,7 @@ export class AbstractObject {
 export class Place {
   constructor(
     public name: string,
-    public level: number,
+    public owner: Owner,
   ) {}
 }
 
@@ -115,6 +137,7 @@ export class CallConstraint extends Constraint {
     public result: Place,
     public callee: Place,
     public args: (Place | PossibleValues | null)[],
+    public caller: GraphNode,
   ) {
     super();
   }
@@ -127,15 +150,25 @@ interface InstantiateResult {
 
 function instantiate(
   constraints: Constraint[],
-  instantiateAtLevel: number,
+  owner: Owner,
+  nesting: Map<Owner, Owner | null>,
 ): InstantiateResult {
+  function isOwnedByTarget(o: Owner): boolean {
+    let cur: Owner | null | undefined = o;
+    while (cur != null) {
+      if (cur === owner) return true;
+      cur = nesting.get(cur);
+    }
+    return false;
+  }
+
   const rewrite = new WeakMap<Place, Place>();
   function lookup(p: Place) {
-    if (p.level < instantiateAtLevel) return p; // this place is captured and is defined in a higher function
+    if (!isOwnedByTarget(p.owner)) return p; // captured from outer scope
     const exists = rewrite.get(p);
     if (exists) return exists;
 
-    const result = new Place(`${p.name}_instant`, p.level);
+    const result = new Place(`${p.name}_instant`, p.owner);
     rewrite.set(p, result);
     return result;
   }
@@ -143,10 +176,10 @@ function instantiate(
   function renewPossibleValues(pv: PossibleValues): PossibleValues {
     const newObjects = new Set<AbstractObject>();
     for (const obj of pv.objects) {
-      if (obj.level < instantiateAtLevel) {
+      if (!isOwnedByTarget(obj.owner)) {
         newObjects.add(obj);
       } else {
-        newObjects.add(obj.clone(lookup));
+        newObjects.add(obj.clone(lookup, obj.owner));
       }
     }
     return new PossibleValues(newObjects, new Set(pv.functions));
@@ -193,6 +226,7 @@ function instantiate(
                 ? renewPossibleValues(a)
                 : null,
           ),
+          constraint.caller,
         ),
       );
     }
@@ -204,7 +238,10 @@ function instantiate(
 export interface SolverResult {
   state: Map<Place, PossibleValues>;
   constraints: Constraint[];
-  instantiate: (atLevel: number) => InstantiateResult;
+  instantiate: (
+    owner: Owner,
+    nesting: Map<Owner, Owner | null>,
+  ) => InstantiateResult;
 }
 
 // assuming trivial subset transfer function
@@ -370,7 +407,7 @@ export function solve(
   return {
     state,
     constraints,
-    instantiate: (atLevel: number) => {
+    instantiate: (owner: Owner, nesting: Map<Owner, Owner | null>) => {
       // include state entries as SubsetConstraints so PossibleValues
       // get their AbstractObjects cloned through renewPossibleValues too
       const stateConstraints: Constraint[] = [];
@@ -379,7 +416,8 @@ export function solve(
       }
       const inst = instantiate(
         [...remainingEquations, ...stateConstraints],
-        atLevel,
+        owner,
+        nesting,
       );
       return inst;
     },

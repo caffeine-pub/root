@@ -6,7 +6,7 @@ import type {
   Program,
   Stmt,
 } from "./ast.js";
-import { CallGraph, FunctionNode } from "./callgraph.js";
+import { CallGraph, GraphNode } from "./callgraph.js";
 import {
   AbstractObject,
   CallConstraint,
@@ -39,22 +39,28 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
   const placeMap = buildPlaces(program);
 
   const callgraph = new CallGraph();
-  let solutions: Map<FunctionNode, SolverResult> = new Map();
+  let solutions: Map<GraphNode, SolverResult> = new Map();
 
-  let sccs: FunctionNode[][] = [[program]];
+  let sccs: GraphNode[][] = [[program]];
   for (let i = 0; i < 5000; i++) {
     debug("\niteration", i);
     callgraph.clearDirty();
 
     // phase 1: solve all SCCs
     const iterations: Iteration[] = [];
+    const callConstraints: CallConstraint[] = [];
     for (const scc of sccs) {
       debug(
         "\nprocessing SCC:",
         scc.map((n) => n.hash),
       );
 
-      const iteration = new Iteration(placeMap, scc, solutions);
+      const iteration = new Iteration(
+        placeMap,
+        scc,
+        solutions,
+        callConstraints,
+      );
       const constraints = iteration.run();
       // debug(constraints);
       const solution = solve(constraints);
@@ -66,24 +72,35 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
     }
 
     // phase 2: update call graph
-    // direct call edges from constraint generation
-    for (const iteration of iterations) {
-      for (const [caller, callee] of iteration.directCallEdges) {
-        callgraph.addEdge(caller, callee);
+    for (const constraint of callConstraints) {
+      const solution = solutions.get(constraint.caller);
+      if (!solution) continue;
+      const calleeValues = solution.state.get(constraint.callee);
+      if (!calleeValues) continue;
+      for (const calleeFnExpr of calleeValues.functions) {
+        // const instantiated = calleeSolution.instantiate(fnInfo.level);
+        callgraph.addEdge(fn, calleeFnExpr);
       }
     }
-    // indirect call edges from solved state
-    for (const [fn, solution] of solutions) {
-      for (const constraint of solution.constraints) {
-        if (constraint instanceof CallConstraint) {
-          const calleeValues = solution.state.get(constraint.callee);
-          if (!calleeValues) continue;
-          for (const calleeFnExpr of calleeValues.functions) {
-            callgraph.addEdge(fn, calleeFnExpr);
-          }
-        }
-      }
-    }
+
+    // // direct call edges from constraint generation
+    // for (const iteration of iterations) {
+    //   for (const [caller, callee] of iteration.directCallEdges) {
+    //     callgraph.addEdge(caller, callee);
+    //   }
+    // }
+    // // indirect call edges from solved state
+    // for (const [fn, solution] of solutions) {
+    //   for (const constraint of solution.constraints) {
+    //     if (constraint instanceof CallConstraint) {
+    //       const calleeValues = solution.state.get(constraint.callee);
+    //       if (!calleeValues) continue;
+    //       for (const calleeFnExpr of calleeValues.functions) {
+    //         callgraph.addEdge(fn, calleeFnExpr);
+    //       }
+    //     }
+    //   }
+    // }
 
     if (!callgraph.dirty) {
       break;
@@ -119,17 +136,13 @@ export function analyze(program: Program): Map<Place, PossibleValues> {
 
 class Iteration {
   private constraints: Constraint[] = [];
-  private currentFunction!: FunctionNode;
-
-  private returnVar: Map<FunctionNode, Place> = new Map();
-
-  /** direct call edges discovered during constraint generation */
-  public directCallEdges: [FunctionNode, FunctionExpr][] = [];
+  private currentFunction!: GraphNode;
 
   constructor(
     private placeMap: PlaceMap,
-    private functions: FunctionNode[],
-    private solutions: Map<FunctionNode, SolverResult>,
+    private functions: GraphNode[],
+    private solutions: Map<GraphNode, SolverResult>,
+    private callConstraints: CallConstraint[],
   ) {}
 
   run() {
@@ -271,7 +284,14 @@ class Iteration {
             for (let i = 0; i < expr.args.length; i++) {
               argPlaces.push(this.expr(expr.args[i]));
             }
-            this.constraints.push(new CallConstraint(place, callee, argPlaces));
+            const callConstraint = new CallConstraint(
+              place,
+              callee,
+              argPlaces,
+              this.currentFunction,
+            );
+            this.callConstraints.push(callConstraint);
+            this.constraints.push(callConstraint);
           }
         }
 

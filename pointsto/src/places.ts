@@ -10,21 +10,24 @@ import type {
   Stmt,
 } from "./ast.js";
 import { AbstractObject, Place, PossibleValues } from "./kleene.js";
-import type { FunctionNode } from "./callgraph.js";
+import type { GraphNode } from "./callgraph.js";
+import type { Owner } from "./kleene.js";
 
 export interface FunctionInfo {
   params: Place[];
   returnVar: Place;
-  level: number;
+  owner: Owner;
 }
 
 export interface PlaceMap {
   /** variable declarations → their Place */
   variables: Map<LetStmt, Place>;
-  /** function/program nodes → params, return var, level */
-  functions: Map<FunctionNode, FunctionInfo>;
+  /** function/program nodes → params, return var, owner */
+  functions: Map<GraphNode, FunctionInfo>;
   /** what each expression resolves to statically */
   exprResolution: Map<Expr, Place | PossibleValues | null>;
+  /** nesting: child owner → parent owner (null for top-level program) */
+  nesting: Map<Owner, Owner | null>;
 }
 
 class Scope {
@@ -51,19 +54,26 @@ class Scope {
   }
 }
 
+type FunctionNode = Program | FunctionExpr;
 export function buildPlaces(program: Program): PlaceMap {
   const variables = new Map<LetStmt, Place>();
   const functions = new Map<FunctionNode, FunctionInfo>();
   const exprResolution = new Map<Expr, Place | PossibleValues | null>();
+  const nesting = new Map<Owner, Owner | null>();
   const scope = new Scope();
-  let level = 0;
   let fnNodeStack: FunctionNode[] = [program];
+
+  nesting.set(program, null);
+
+  function currentOwner(): Owner {
+    return fnNodeStack.at(-1)! as Owner;
+  }
 
   function predeclare(stmts: Stmt[]) {
     for (const stmt of stmts) {
       switch (stmt.kind) {
         case "let": {
-          const place = new Place(stmt.name, level);
+          const place = new Place(stmt.name, currentOwner());
           variables.set(stmt, place);
           scope.declare(stmt.name, place);
           break;
@@ -82,19 +92,20 @@ export function buildPlaces(program: Program): PlaceMap {
 
   function walkFunction(node: FunctionNode, params: string[]) {
     fnNodeStack.push(node);
+    const owner = currentOwner();
     const paramPlaces: Place[] = [];
     for (const name of params) {
-      const place = new Place(`${fnNodeStack.at(-1)!.hash}.${name}`, level);
+      const place = new Place(`${node.hash}.${name}`, owner);
       paramPlaces.push(place);
       scope.declare(name, place);
     }
 
-    const returnVar = new Place(`${node.hash}.return`, level);
+    const returnVar = new Place(`${node.hash}.return`, owner);
 
     functions.set(node, {
       params: paramPlaces,
       returnVar,
-      level,
+      owner,
     });
 
     // pre-declare all let bindings so function bodies can forward-reference
@@ -163,7 +174,7 @@ export function buildPlaces(program: Program): PlaceMap {
         result = null;
         break;
       case "object": {
-        const object = new AbstractObject(expr.hash, level);
+        const object = new AbstractObject(expr.hash, currentOwner());
         for (const prop of expr.properties) {
           walkExpr(prop.value);
         }
@@ -171,12 +182,12 @@ export function buildPlaces(program: Program): PlaceMap {
         break;
       }
       case "function": {
+        const parent = currentOwner();
+        nesting.set(expr, parent);
         scope.push();
-        level++;
         walkFunction(expr, expr.params);
-        level--;
         scope.pop();
-        result = new PossibleValues(new Set(), new Set([expr]));
+        result = new PossibleValues(new Set(), new Set([expr])); // need to decide what to do here
         break;
       }
       case "call": {
@@ -185,7 +196,7 @@ export function buildPlaces(program: Program): PlaceMap {
 
         result = new Place(
           `call(${humanReadable(callee)}@${expr.line})`,
-          level,
+          currentOwner(),
         );
         break;
       }
@@ -193,7 +204,7 @@ export function buildPlaces(program: Program): PlaceMap {
         const base = walkExpr(expr.object);
         result = new Place(
           `${humanReadable(base)}.${expr.property}@${expr.line}`,
-          level,
+          currentOwner(),
         );
         break;
       }
@@ -208,8 +219,7 @@ export function buildPlaces(program: Program): PlaceMap {
     return result;
   }
 
-  // program is level 0
   walkFunction(program, []);
 
-  return { variables, functions, exprResolution };
+  return { variables, functions, exprResolution, nesting };
 }
