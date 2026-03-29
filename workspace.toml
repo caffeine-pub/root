@@ -1,4 +1,4 @@
-projects = ["re", "ts-dep-analyze", "ts-hash", "pointsto", "site"]
+projects = ["re", "ts-dep-analyze", "ts-hash", "pointsto", "site", "ts-arena"]
 
 [engines]
 node = "22.20.0"
@@ -26,7 +26,6 @@ skipLibCheck = true
 
 [pnpm]
 minimumReleaseAge = 4320
-minimumReleaseAgeExclude = ["solid-styled", "unplugin-solid-styled"]
 
 [prettier]
 plugins = ["prettier-plugin-toml"]
