@@ -2,17 +2,18 @@ import { describe, it, expect } from "vitest";
 import { lex } from "../src/lexer.js";
 import { parse } from "../src/parser.js";
 import { analyze } from "../src/analysis.js";
-import { Place, PossibleValues } from "../src/kleene.js";
+import { type PlaceId, PossibleValues, places, objects } from "../src/kleene.js";
 
 function pointsTo(source: string): Map<string, Set<string>> {
   const program = parse(lex(source));
   const raw = analyze(program);
   const result = new Map<string, Set<string>>();
-  for (const [place, values] of raw) {
+  for (const [placeId, values] of raw) {
+    const name = places.get(placeId).name;
     const labels = new Set<string>();
-    for (const obj of values.objects) labels.add(obj.name);
-    for (const fn of values.functions) labels.add(fn.hash);
-    if (labels.size > 0) result.set(place.name, labels);
+    for (const objId of values.objects) labels.add(objects.get(objId).name);
+    for (const fn of values.functions) labels.add(fn.label);
+    if (labels.size > 0) result.set(name, labels);
   }
   return result;
 }

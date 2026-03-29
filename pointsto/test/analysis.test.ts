@@ -2,43 +2,43 @@ import { describe, it, expect } from "vitest";
 import { lex } from "../src/lexer.js";
 import { parse } from "../src/parser.js";
 import { analyze } from "../src/analysis.js";
-import { Place, PossibleValues } from "../src/kleene.js";
+import { type PlaceId, PossibleValues, places, objects } from "../src/kleene.js";
 
-function run(source: string): Map<Place, PossibleValues> {
+function run(source: string): Map<PlaceId, PossibleValues> {
   const program = parse(lex(source));
   return analyze(program);
 }
 
-/** find a Place by name in the result map */
+/** find a PlaceId by name in the result map */
 function findPlace(
-  state: Map<Place, PossibleValues>,
+  state: Map<PlaceId, PossibleValues>,
   name: string,
-): [Place, PossibleValues] | undefined {
-  for (const [place, values] of state) {
-    if (place.name === name) return [place, values];
+): [PlaceId, PossibleValues] | undefined {
+  for (const [placeId, values] of state) {
+    if (places.get(placeId).name === name) return [placeId, values];
   }
   return undefined;
 }
 
 function expectObjects(
-  state: Map<Place, PossibleValues>,
+  state: Map<PlaceId, PossibleValues>,
   placeName: string,
   ...labels: string[]
 ) {
   const found = findPlace(state, placeName);
   expect(found, `expected place "${placeName}" to exist`).toBeDefined();
-  const objectNames = [...found![1].objects].map((o) => o.name).sort();
+  const objectNames = [...found![1].objects].map((id) => objects.get(id).name).sort();
   expect(objectNames).toEqual(labels.sort());
 }
 
 function expectFunctions(
-  state: Map<Place, PossibleValues>,
+  state: Map<PlaceId, PossibleValues>,
   placeName: string,
   ...labels: string[]
 ) {
   const found = findPlace(state, placeName);
   expect(found, `expected place "${placeName}" to exist`).toBeDefined();
-  expect([...found![1].functions].map((f) => f.hash).sort()).toEqual(
+  expect([...found![1].functions].map((f) => f.label).sort()).toEqual(
     labels.sort(),
   );
 }

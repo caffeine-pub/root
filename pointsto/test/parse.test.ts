@@ -246,7 +246,7 @@ describe("parser", () => {
     const expr = firstExpr("'myFunc: (x) => { return x; }");
     expect(expr.kind).toBe("function");
     if (expr.kind === "function") {
-      expect(expr.hash).toBe("myFunc");
+      expect(expr.label).toBe("myFunc");
     }
   });
 
