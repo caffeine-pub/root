@@ -40,12 +40,20 @@ interface AreaData {
 
 const changelog: ChangelogEntry[] = [
   {
+    badge: "new",
+    text: "field-sensitive SSA: extending Braun et al. to version places",
+  },
+  {
     badge: "closed",
-    text: "ts-hash (type-directed hashing)",
+    text: "ts-arena (typed object pools with nominal ids)",
   },
   {
     badge: "moved",
-    text: "ts-hash (type-directed hashing): planned -> in progress",
+    text: "analysis prototype: arena-ified places, objects, and functions",
+  },
+  {
+    badge: "closed",
+    text: "ts-hash (type-directed hashing)",
   },
   { badge: "moved", text: "analysis prototype: planned -> in progress" },
   { badge: "closed", text: "the caffeine.pub website" },
@@ -125,11 +133,39 @@ const areas: AreaData[] = [
     ],
   },
   {
+    name: "ts-arena (typed object pools)",
+    status: "solid",
+    statusLabel: "complete",
+    desc: "Typed object pools with nominal ids and bitset-tracked liveness for arena-style memory management",
+    nodes: [
+      {
+        status: "solid",
+        name: "Arena<I, T> with nominal Id<Brand>",
+        note: "Compile-time branded ids over raw numbers. Zero runtime cost for type safety",
+      },
+      {
+        status: "solid",
+        name: "Poolable interface with create/blank lifecycle",
+        note: "Objects provide blank() constructor and create(...args) initializer for pool reuse",
+      },
+      {
+        status: "solid",
+        name: "BitSet-tracked liveness",
+        note: "Compact Uint32Array-backed bit array with auto-resize. Freelist for O(1) slot reuse",
+      },
+      {
+        status: "solid",
+        name: "full API & tests",
+        note: "alloc, get, tryGet, isLive, free, clear, forEach, iterator. 15 passing tests",
+      },
+    ],
+  },
+  {
     name: "analysis prototype",
     status: "active",
     statusLabel: "in progress",
     desc: "Prototype an iterative analysis to analyze call graph and interprocedural, field-sensitive points-to analysis at the same time",
-    depends: ["ts-hash"],
+    depends: ["ts-hash", "ts-arena"],
     nodes: [
       {
         status: "solid",
@@ -142,19 +178,24 @@ const areas: AreaData[] = [
         note: "JS-like syntax for the above",
       },
       {
+        status: "solid",
+        name: "arena-ify analysis data structures",
+        note: "Places, abstract objects, and functions managed by typed pools. 50/62 tests passing",
+      },
+      {
         status: "exploring",
-        name: "iterative analysis",
-        note: "Discover call graph, run points-to analysis, reanalyze call graph, run points-to, iterate until fixpoint",
+        name: "iterative analysis with call instantiation",
+        note: "Discover call graph, run points-to analysis, reanalyze call graph, run points-to, iterate until fixpoint. 12 call-graph tests blocked on instantiation",
+      },
+      {
+        status: "exploring",
+        name: "field-sensitive SSA",
+        note: "Extend Braun et al. SSA to version places (abstractObject × field). Prototype at 26 tests, open questions on loop field-reads",
       },
       {
         status: "planned",
         name: "satisfy all test cases",
         note: "Mutual recursion, loops, tree recursion, higher-order functions, multi-step discovery",
-      },
-      {
-        status: "planned",
-        name: "translate to field-sensitive SSA",
-        note: "Use the results of points-to analysis to lower functions and fields into SSA form (slower than Cytron et al.)",
       },
       {
         status: "planned",
