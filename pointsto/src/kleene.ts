@@ -112,7 +112,7 @@ interface InstantiateResult {
   newConstraints: Constraint[];
 }
 
-function instantiate(
+export function instantiate(
   constraints: Constraint[],
   owner: Owner,
   nesting: Map<Owner, Owner | null>,

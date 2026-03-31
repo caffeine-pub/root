@@ -6,7 +6,7 @@ import type {
   Program,
   Stmt,
 } from "./ast.js";
-import { CallGraph, GraphNode } from "./callgraph.js";
+import { CallGraph, GraphNode, Instantiation } from "./callgraph.js";
 import {
   type PlaceId,
   places,
@@ -20,6 +20,7 @@ import {
   solve,
   SolverResult,
   SubsetConstraint,
+  instantiate as instantiateConstraints,
 } from "./kleene.js";
 import { buildPlaces, PlaceMap } from "./places.js";
 
@@ -42,15 +43,18 @@ export function analyze(program: Program): Map<PlaceId, PossibleValues> {
 
   const callgraph = new CallGraph();
   let solutions: Map<GraphNode, SolverResult> = new Map();
+  /** Shared across iterations: per-FunctionExpr body constraints */
+  const fnConstraintCache = new Map<FunctionExpr, Constraint[]>();
 
   let sccs: GraphNode[][] = [[program]];
   for (let i = 0; i < 5000; i++) {
     debug("\niteration", i);
     callgraph.clearDirty();
 
-    // phase 1: solve all SCCs
-    const iterations: Iteration[] = [];
+    // phase 1: collect constraints from all SCCs, then solve together
     const callConstraints: CallConstraint[] = [];
+    const allConstraints: Constraint[] = [];
+    const allNodes: GraphNode[] = [];
     for (const scc of sccs) {
       debug(
         "\nprocessing SCC:",
@@ -62,26 +66,99 @@ export function analyze(program: Program): Map<PlaceId, PossibleValues> {
         scc,
         solutions,
         callConstraints,
+        fnConstraintCache,
       );
       const constraints = iteration.run();
-      // debug(constraints);
-      const solution = solve(constraints);
-
-      for (const fn of scc) {
-        solutions.set(fn, solution);
-      }
-      iterations.push(iteration);
+      allConstraints.push(...constraints);
+      allNodes.push(...scc);
     }
 
-    // phase 2: update call graph
+    // solve all constraints together so cross-SCC data flows in one pass
+    const sharedState = new Map<PlaceId, PossibleValues>();
+    const solution = solve(allConstraints, sharedState);
+    for (const node of allNodes) {
+      solutions.set(node, solution);
+    }
+
+    // phase 2: update call graph with discovered call targets
+    debug("\nphase 2: processing", callConstraints.length, "call constraints");
     for (const constraint of callConstraints) {
+      debug("  call constraint: callee=", constraint.callee, "caller=", constraint.caller.hash, "result=", constraint.result);
       const solution = solutions.get(constraint.caller);
-      if (!solution) continue;
+      if (!solution) { debug("    no solution for caller"); continue; }
       const calleeValues = solution.state.get(constraint.callee);
-      if (!calleeValues) continue;
-      for (const calleeFnExpr of calleeValues.functions) {
-        // TODO: create Instantiation and add as edge
-        // callgraph.addEdge(constraint.caller, instantiation);
+      if (!calleeValues) { debug("    callee place not in solution"); continue; }
+      debug("    callee resolves to:", [...calleeValues.functions].map((f: any) => f.label ?? f.hash));
+
+      for (const calleeFn of calleeValues.functions) {
+        if (calleeFn instanceof Instantiation) continue; // already processed
+        const calleeFnExpr = calleeFn as FunctionExpr;
+
+        // get or collect the callee's body constraints
+        let bodyConstraints = fnConstraintCache.get(calleeFnExpr);
+        if (!bodyConstraints) {
+          // create a temporary Iteration to walk the function body
+          const tmpIteration = new Iteration(
+            placeMap,
+            [],
+            solutions,
+            [],
+            fnConstraintCache,
+          );
+          bodyConstraints = tmpIteration.collectFnConstraints(calleeFnExpr);
+        }
+
+        const fnInfo = placeMap.functions.get(calleeFnExpr)!;
+
+        // instantiate: clone constraints with fresh places
+        const { rewrite, newConstraints } = instantiateConstraints(
+          bodyConstraints,
+          fnInfo.owner,
+          placeMap.nesting,
+        );
+
+        // map the original params and return to their instantiated versions
+        const instParams = fnInfo.params.map(
+          (p) => rewrite.get(p) ?? p,
+        );
+        const instReturn = rewrite.get(fnInfo.returnVar) ?? fnInfo.returnVar;
+
+        // wire args → instantiated params
+        // keep PlaceId refs as-is — solver will propagate when values arrive
+        const wireConstraints: Constraint[] = [];
+        for (let j = 0; j < constraint.args.length; j++) {
+          const arg = constraint.args[j];
+          if (arg != null && instParams[j] != null) {
+            wireConstraints.push(
+              new SubsetConstraint(instParams[j], arg),
+            );
+          }
+        }
+        // wire instantiated return → call result
+        wireConstraints.push(
+          new SubsetConstraint(constraint.result, instReturn),
+        );
+
+        const allConstraints = [...newConstraints, ...wireConstraints];
+
+        // build hash for dedup
+        const hash = `${calleeFnExpr.label}@${constraint.result}`;
+
+        const inst = new Instantiation(
+          calleeFnExpr,
+          constraint.args.map((a) =>
+            a instanceof PossibleValues
+              ? a
+              : new PossibleValues(),
+          ),
+          rewrite,
+          allConstraints,
+          instParams,
+          instReturn,
+          hash,
+        );
+
+        callgraph.addEdge(constraint.caller, inst);
       }
     }
 
@@ -117,27 +194,93 @@ export function analyze(program: Program): Map<PlaceId, PossibleValues> {
   return merged;
 }
 
+type FunctionNode = Program | FunctionExpr;
+
 class Iteration {
   private constraints: Constraint[] = [];
-  private currentFunction!: GraphNode;
+  /** Which function body we're currently walking (for return wiring) */
+  private currentFunction!: FunctionNode;
+  /** The SCC GraphNode that owns the current solve (for CallConstraint.caller) */
+  private currentCaller!: GraphNode;
 
   constructor(
     private placeMap: PlaceMap,
     private functions: GraphNode[],
     private solutions: Map<GraphNode, SolverResult>,
     private callConstraints: CallConstraint[],
+    private fnConstraintCache: Map<FunctionExpr, Constraint[]>,
   ) {}
 
   run() {
     for (const fn of this.functions) {
-      this.currentFunction = fn;
-      for (const stmt of fn.body) {
-        const shouldContinue = this.stmt(stmt);
-        if (!shouldContinue) break;
+      this.currentCaller = fn;
+      if (fn instanceof Instantiation) {
+        // Instantiation nodes carry pre-made constraints — add them directly
+        this.currentFunction = fn.expr;
+        for (const c of fn.constraints) {
+          if (c instanceof CallConstraint) {
+            c.caller = this.currentCaller;
+            this.callConstraints.push(c);
+          }
+          this.constraints.push(c);
+        }
+      } else {
+        // Program node — walk body
+        this.currentFunction = fn;
+        for (const stmt of fn.body) {
+          const shouldContinue = this.stmt(stmt);
+          if (!shouldContinue) break;
+        }
       }
     }
 
     return this.constraints;
+  }
+
+  /**
+   * Walk a function body to collect its constraints.
+   * Results cached in the shared fnConstraintCache.
+   */
+  /** Functions currently being collected (for cycle detection) */
+  private collecting = new Set<FunctionExpr>();
+
+  collectFnConstraints(fnExpr: FunctionExpr): Constraint[] {
+    const cached = this.fnConstraintCache.get(fnExpr);
+    if (cached) return cached;
+
+    // cycle detection: if we're already collecting this function, return empty
+    // the call will be resolved via CallConstraint in a later iteration
+    if (this.collecting.has(fnExpr)) return [];
+
+    this.collecting.add(fnExpr);
+
+    // Save current state
+    const savedConstraints = this.constraints;
+    const savedFunction = this.currentFunction;
+    const savedCallConstraints = this.callConstraints;
+
+    // Walk the function body into a fresh constraint array
+    // Use a dummy callConstraints to avoid leaking original-place CallConstraints
+    // into the outer callConstraints array (they'll be instantiated later)
+    this.constraints = [];
+    this.callConstraints = [];
+    this.currentFunction = fnExpr;
+
+    for (const stmt of fnExpr.body) {
+      const shouldContinue = this.stmt(stmt);
+      if (!shouldContinue) break;
+    }
+
+    const fnConstraints = this.constraints;
+    this.fnConstraintCache.set(fnExpr, fnConstraints);
+
+    // Restore state
+    this.constraints = savedConstraints;
+    this.callConstraints = savedCallConstraints;
+    this.currentFunction = savedFunction;
+    this.collecting.delete(fnExpr);
+
+    return fnConstraints;
   }
 
   stmt(stmt: Stmt): boolean {
@@ -268,7 +411,7 @@ class Iteration {
               place,
               callee,
               argPlaces,
-              this.currentFunction,
+              this.currentCaller,
             );
             this.callConstraints.push(callConstraint);
             this.constraints.push(callConstraint);
@@ -277,21 +420,49 @@ class Iteration {
 
         if (possibleCallees) {
           for (const calleeFn of possibleCallees) {
-            const fnInfo = this.placeMap.functions.get(calleeFn)!;
-            debug("we're wiring up", calleeFn.hash, "in this call");
-            // params
+            if (calleeFn instanceof Instantiation) continue;
+            const calleeFnExpr = calleeFn as FunctionExpr;
+            const fnInfo = this.placeMap.functions.get(calleeFnExpr)!;
+            debug("we're wiring up", calleeFnExpr.label, "in this call");
+
+            // collect the function body's constraints
+            const bodyConstraints = this.collectFnConstraints(calleeFnExpr);
+
+            // instantiate: clone with fresh places
+            const { rewrite, newConstraints } = instantiateConstraints(
+              bodyConstraints,
+              fnInfo.owner,
+              this.placeMap.nesting,
+            );
+
+            // map params and return to their instantiated versions
+            const instParams = fnInfo.params.map(
+              (p) => rewrite.get(p) ?? p,
+            );
+            const instReturn = rewrite.get(fnInfo.returnVar) ?? fnInfo.returnVar;
+
+            // wire args → instantiated params
             for (let i = 0; i < expr.args.length; i++) {
               const arg = this.expr(expr.args[i]);
-              if (arg != null)
+              if (arg != null && instParams[i] != null)
                 this.constraints.push(
-                  new SubsetConstraint(fnInfo.params[i], arg),
+                  new SubsetConstraint(instParams[i], arg),
                 );
             }
 
-            // return value
+            // wire instantiated return → call result
             this.constraints.push(
-              new SubsetConstraint(place, fnInfo.returnVar),
+              new SubsetConstraint(place, instReturn),
             );
+
+            // add instantiated body constraints, fixing up CallConstraint callers
+            for (const c of newConstraints) {
+              if (c instanceof CallConstraint) {
+                c.caller = this.currentCaller;
+                this.callConstraints.push(c);
+              }
+              this.constraints.push(c);
+            }
           }
         }
 

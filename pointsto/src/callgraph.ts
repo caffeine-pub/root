@@ -1,5 +1,6 @@
 import type { FunctionExpr, Program } from "./ast.js";
-import type { Constraint, Place, PossibleValues } from "./kleene.js";
+import type { PlaceId } from "./arenas.js";
+import type { Constraint, PossibleValues } from "./kleene.js";
 
 /**
  * An instantiation of a function at a particular call site.
@@ -10,10 +11,10 @@ export class Instantiation {
   constructor(
     public expr: FunctionExpr,
     public args: PossibleValues[],
-    public rewrite: Map<Place, Place>,
+    public rewrite: Map<PlaceId, PlaceId>,
     public constraints: Constraint[],
-    public params: Place[],
-    public returnVar: Place,
+    public params: PlaceId[],
+    public returnVar: PlaceId,
     public hash: string,
   ) {}
 }
