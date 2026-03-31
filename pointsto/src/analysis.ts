@@ -314,10 +314,11 @@ class Iteration {
 
         // if either branch continues, the whole if continues
         if (firstFlow === "continue" || secondFlow === "continue") return "continue";
-        // if both return, the whole if returns
-        if (firstFlow === "return" && secondFlow === "return") return "return";
-        // mixed break/return: conservatively continue (break only meaningful inside loop)
-        return "continue";
+        // if both branches agree, propagate that
+        if (firstFlow === secondFlow) return firstFlow;
+        // mixed break/return: both are non-continuing, propagate break
+        // (break is "less final" than return — conservative choice)
+        return "break";
       }
       case "loop": {
         for (const s of stmt.body) {
@@ -411,6 +412,9 @@ class Iteration {
           );
           if (combined.size > 0) {
             possibleCallees = combined;
+            // Mark this function's cache as solution-dependent — must not be
+            // reused across iterations since the solution set may grow.
+            this.fnConstraintCache.delete(this.currentFunction);
           } else {
             debug("we're emitting a callconstraint and leaving it be");
             const argPlaces: (PlaceId | PossibleValues | null)[] = [];
