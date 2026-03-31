@@ -184,12 +184,12 @@ const areas: AreaData[] = [
       {
         status: "solid",
         name: "arena-ify analysis data structures",
-        note: "Places, abstract objects, and functions managed by typed pools. 50/62 tests passing",
+        note: "Places, abstract objects, and functions managed by typed pools",
       },
       {
-        status: "exploring",
+        status: "solid",
         name: "iterative analysis with call instantiation",
-        note: "Discover call graph, run points-to analysis, reanalyze call graph, run points-to, iterate until fixpoint. 12 call-graph tests blocked on instantiation",
+        note: "Discover call graph, instantiate per-function constraints with HM-style levels, iterate to fixpoint. 69 tests passing including deep callback chains, composition, and CPS",
       },
       {
         status: "exploring",
