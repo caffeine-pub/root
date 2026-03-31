@@ -192,9 +192,9 @@ const areas: AreaData[] = [
         note: "Discover call graph, instantiate per-function constraints with HM-style levels, iterate to fixpoint. 69 tests passing including deep callback chains, composition, and CPS",
       },
       {
-        status: "exploring",
+        status: "solid",
         name: "field-sensitive SSA",
-        note: "Extend Braun et al. SSA to version places (abstractObject × field). Prototype at 26 tests, open questions on loop field-reads",
+        note: "Extends Braun et al. SSA to version places (abstractObject × field). 26 tests. Summary cell memory SSA resolves the loop field-read question.",
       },
       {
         status: "planned",
