@@ -38,7 +38,7 @@ function expectFunctions(
 ) {
   const found = findPlace(state, placeName);
   expect(found, `expected place "${placeName}" to exist`).toBeDefined();
-  expect([...found![1].functions].map((f) => f.label).sort()).toEqual(
+  expect([...found![1].functions].map((f) => 'expr' in f ? f.expr.label : f.label).sort()).toEqual(
     labels.sort(),
   );
 }

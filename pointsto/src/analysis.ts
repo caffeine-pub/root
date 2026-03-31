@@ -139,7 +139,7 @@ export function analyze(program: Program): Map<PlaceId, PossibleValues> {
           new SubsetConstraint(constraint.result, instReturn),
         );
 
-        const allConstraints = [...newConstraints, ...wireConstraints];
+        const instConstraints = [...newConstraints, ...wireConstraints];
 
         // build hash for dedup
         const hash = `${calleeFnExpr.label}@${constraint.result}`;
@@ -152,7 +152,7 @@ export function analyze(program: Program): Map<PlaceId, PossibleValues> {
               : new PossibleValues(),
           ),
           rewrite,
-          allConstraints,
+          instConstraints,
           instParams,
           instReturn,
           hash,
@@ -399,7 +399,10 @@ class Iteration {
           for (const solution of this.solutions.values()) {
             const exists = solution.state.get(callee);
             if (exists) {
-              for (const fn of exists.functions) combined.add(fn as FunctionExpr);
+              for (const fn of exists.functions) {
+                if (fn instanceof Instantiation) combined.add(fn.expr);
+                else combined.add(fn);
+              }
             }
           }
           debug(
