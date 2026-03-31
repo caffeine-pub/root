@@ -433,6 +433,12 @@ class Iteration {
         }
 
         if (possibleCallees) {
+          // evaluate args once before the callee loop to avoid duplicate constraints
+          const argPlaces: (PlaceId | PossibleValues | null)[] = [];
+          for (let i = 0; i < expr.args.length; i++) {
+            argPlaces.push(this.expr(expr.args[i]));
+          }
+
           for (const calleeFn of possibleCallees) {
             if (calleeFn instanceof Instantiation) continue;
             const calleeFnExpr = calleeFn as FunctionExpr;
@@ -455,9 +461,9 @@ class Iteration {
             );
             const instReturn = rewrite.get(fnInfo.returnVar) ?? fnInfo.returnVar;
 
-            // wire args → instantiated params
-            for (let i = 0; i < expr.args.length; i++) {
-              const arg = this.expr(expr.args[i]);
+            // wire args → instantiated params (args evaluated once, before the callee loop)
+            for (let i = 0; i < argPlaces.length; i++) {
+              const arg = argPlaces[i];
               if (arg != null && instParams[i] != null)
                 this.constraints.push(
                   new SubsetConstraint(instParams[i], arg),
