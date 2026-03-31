@@ -61,10 +61,31 @@ interface TimelineItem {
 
 const timelineData: TimelineItem[] = [
   {
+    date: "Apr 3, 2026",
+    bold: "call instantiation",
+    content:
+      " for pointsto — context-sensitive analysis with Hindley-Milner style level-based generalization. 69 tests passing.",
+    now: true,
+  },
+  {
+    date: "Mar 31, 2026",
+    bold: "field-sensitive SSA",
+    content:
+      ", extending Braun et al. to version places (abstractObject × field)",
+  },
+  {
+    date: "Mar 29, 2026",
+    bold: "ts-arena",
+    content: ", typed object pools with nominal ids and bitset-tracked liveness",
+  },
+  {
+    date: "Mar 29, 2026",
+    content: "arena-ified pointsto analysis — places, abstract objects, and functions managed by pools",
+  },
+  {
     date: "Mar 21, 2026",
     bold: "ts-hash",
     content: ", compile-time generated hashing functions for TypeScript",
-    now: true,
   },
   {
     date: "Mar 20, 2026",
