@@ -9,35 +9,43 @@ import type {
   Program,
   Stmt,
 } from "./ast.js";
-import { AbstractObject, Place, PossibleValues } from "./kleene.js";
-import type { FunctionNode } from "./callgraph.js";
+import {
+  type PlaceId,
+  type AbstractObjectId,
+  type Owner,
+  places,
+  objects,
+  PossibleValues,
+} from "./kleene.js";
 
 export interface FunctionInfo {
-  params: Place[];
-  returnVar: Place;
-  level: number;
+  params: PlaceId[];
+  returnVar: PlaceId;
+  owner: Owner;
 }
 
+type FunctionNode = Program | FunctionExpr;
+
 export interface PlaceMap {
-  /** variable declarations → their Place */
-  variables: Map<LetStmt, Place>;
-  /** function/program nodes → params, return var, level */
+  /** variable declarations → their PlaceId */
+  variables: Map<LetStmt, PlaceId>;
+  /** function/program nodes → params, return var, owner */
   functions: Map<FunctionNode, FunctionInfo>;
   /** what each expression resolves to statically */
-  exprResolution: Map<Expr, Place | PossibleValues | null>;
-  /** callee info: for each call expr, the Place or FunctionExprs that could be called */
-  calleeResolution: Map<FunctionNode, Set<Place | FunctionExpr>>;
+  exprResolution: Map<Expr, PlaceId | PossibleValues | null>;
+  /** nesting: child owner → parent owner (null for top-level program) */
+  nesting: Map<Owner, Owner | null>;
 }
 
 class Scope {
-  private stack: { name: string; place: Place }[] = [];
+  private stack: { name: string; place: PlaceId }[] = [];
   private marks: number[] = [];
 
-  declare(name: string, place: Place) {
+  declare(name: string, place: PlaceId) {
     this.stack.push({ name, place });
   }
 
-  lookup(name: string): Place | undefined {
+  lookup(name: string): PlaceId | undefined {
     for (let i = this.stack.length - 1; i >= 0; i--) {
       if (this.stack[i]!.name === name) return this.stack[i]!.place;
     }
@@ -54,43 +62,61 @@ class Scope {
 }
 
 export function buildPlaces(program: Program): PlaceMap {
-  const variables = new Map<LetStmt, Place>();
+  const variables = new Map<LetStmt, PlaceId>();
   const functions = new Map<FunctionNode, FunctionInfo>();
-  const exprResolution = new Map<Expr, Place | PossibleValues | null>();
-  const calleeResolution = new Map<FunctionNode, Set<Place | FunctionExpr>>();
+  const exprResolution = new Map<Expr, PlaceId | PossibleValues | null>();
+  const nesting = new Map<Owner, Owner | null>();
   const scope = new Scope();
-  let level = 0;
   let fnNodeStack: FunctionNode[] = [program];
 
-  function addCallee(place: Place | FunctionExpr) {
-    const fnNode = fnNodeStack.at(-1)!;
-    const exists = calleeResolution.get(fnNode);
-    if (exists) {
-      exists.add(place);
-    } else {
-      calleeResolution.set(fnNode, new Set([place]));
+  nesting.set(program, null);
+
+  function currentOwner(): Owner {
+    return fnNodeStack.at(-1)! as Owner;
+  }
+
+  function predeclare(stmts: Stmt[]) {
+    for (const stmt of stmts) {
+      switch (stmt.kind) {
+        case "let": {
+          const place = places.alloc(stmt.name, currentOwner());
+          variables.set(stmt, place);
+          scope.declare(stmt.name, place);
+          break;
+        }
+        case "if":
+          predeclare(stmt.then);
+          if (stmt.else_) predeclare(stmt.else_);
+          break;
+        case "loop":
+        case "block":
+          predeclare(stmt.body);
+          break;
+      }
     }
   }
 
   function walkFunction(node: FunctionNode, params: string[]) {
     fnNodeStack.push(node);
-    const paramPlaces: Place[] = [];
+    const owner = currentOwner();
+    const paramPlaces: PlaceId[] = [];
     for (const name of params) {
-      const place = new Place(name, level);
+      const place = places.alloc(`${node.hash}.${name}`, owner);
       paramPlaces.push(place);
       scope.declare(name, place);
     }
 
-    const returnVar = new Place(
-      `return@${node.kind === "function" ? node.hash : "top"}`,
-      level,
-    );
+    const returnVar = places.alloc(`${node.hash}.return`, owner);
 
     functions.set(node, {
       params: paramPlaces,
       returnVar,
-      level,
+      owner,
     });
+
+    // pre-declare all let bindings so function bodies can forward-reference
+    // variables declared later in the same scope (enable forward references)
+    predeclare(node.body);
 
     for (const stmt of node.body) {
       walkStmt(stmt);
@@ -101,9 +127,7 @@ export function buildPlaces(program: Program): PlaceMap {
   function walkStmt(stmt: Stmt) {
     switch (stmt.kind) {
       case "let": {
-        const place = new Place(stmt.name, level);
-        variables.set(stmt, place);
-        scope.declare(stmt.name, place);
+        // place already created in walkFunction's pre-declare pass
         if (stmt.init) walkExpr(stmt.init);
         break;
       }
@@ -128,13 +152,22 @@ export function buildPlaces(program: Program): PlaceMap {
     }
   }
 
-  function walkExpr(expr: Expr): Place | PossibleValues | null {
-    let result: Place | PossibleValues | null;
+  function humanReadable(x: PlaceId | PossibleValues | null): string {
+    if (x == null) return "unknown";
+    if (typeof x === "number") return places.get(x).name;
+    const object = x.objects.values().next().value;
+    if (object !== undefined) return objects.get(object).name;
+    const fn = x.functions.values().next().value;
+    return fn?.hash ?? "unknown";
+  }
+
+  function walkExpr(expr: Expr): PlaceId | PossibleValues | null {
+    let result: PlaceId | PossibleValues | null;
 
     switch (expr.kind) {
       case "ident": {
         const place = scope.lookup(expr.name);
-        if (place) {
+        if (place !== undefined) {
           result = place;
         } else {
           throw new Error(
@@ -148,18 +181,18 @@ export function buildPlaces(program: Program): PlaceMap {
         result = null;
         break;
       case "object": {
-        const object = new AbstractObject(expr.hash, level);
+        const objId = objects.alloc(expr.hash, currentOwner());
         for (const prop of expr.properties) {
           walkExpr(prop.value);
         }
-        result = new PossibleValues(new Set([object]));
+        result = new PossibleValues(new Set([objId]));
         break;
       }
       case "function": {
+        const parent = currentOwner();
+        nesting.set(expr, parent);
         scope.push();
-        level++;
         walkFunction(expr, expr.params);
-        level--;
         scope.pop();
         result = new PossibleValues(new Set(), new Set([expr]));
         break;
@@ -168,24 +201,18 @@ export function buildPlaces(program: Program): PlaceMap {
         const callee = walkExpr(expr.callee);
         for (const arg of expr.args) walkExpr(arg);
 
-        // record callee info for analysis to use
-        if (callee) {
-          if (callee instanceof Place) {
-            addCallee(callee);
-          } else {
-            // direct PossibleValues — we know the functions statically
-            for (const calleeFnExpr of callee.functions) {
-              addCallee(calleeFnExpr);
-            }
-          }
-        }
-
-        result = new Place(`call@${expr.line}`, level);
+        result = places.alloc(
+          `call(${humanReadable(callee)}@${expr.line})`,
+          currentOwner(),
+        );
         break;
       }
       case "member": {
-        walkExpr(expr.object);
-        result = new Place(`member@${expr.line} .${expr.property}`, level);
+        const base = walkExpr(expr.object);
+        result = places.alloc(
+          `${humanReadable(base)}.${expr.property}@${expr.line}`,
+          currentOwner(),
+        );
         break;
       }
       case "assign": {
@@ -199,8 +226,7 @@ export function buildPlaces(program: Program): PlaceMap {
     return result;
   }
 
-  // program is level 0
   walkFunction(program, []);
 
-  return { variables, functions, exprResolution, calleeResolution };
+  return { variables, functions, exprResolution, nesting };
 }

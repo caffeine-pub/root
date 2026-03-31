@@ -27,6 +27,9 @@ export enum TokenKind {
   Semicolon, // ;
   Colon,     // :
 
+  // Labels
+  Label,     // 'ident
+
   // Operators
   Eq,        // =
   Arrow,     // =>
@@ -144,8 +147,8 @@ export function lex(source: string): Token[] {
       continue;
     }
 
-    // Strings
-    if (ch === '"' || ch === "'") {
+    // Strings (double-quote only)
+    if (ch === '"') {
       const quote = advance();
       let value = "";
       while (i < source.length && peek() !== quote) {
@@ -164,6 +167,20 @@ export function lex(source: string): Token[] {
       }
       if (i < source.length) advance(); // closing quote
       emit(TokenKind.String, value, startLine, startCol);
+      continue;
+    }
+
+    // Labels ('ident)
+    if (ch === "'") {
+      advance();
+      if (!isIdentStart(peek())) {
+        throw new Error(`Expected identifier after ' at ${startLine}:${startCol}`);
+      }
+      let value = "";
+      while (i < source.length && isIdentPart(peek())) {
+        value += advance();
+      }
+      emit(TokenKind.Label, value, startLine, startCol);
       continue;
     }
 

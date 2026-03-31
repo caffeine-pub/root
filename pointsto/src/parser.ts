@@ -1,14 +1,14 @@
-import { Token, TokenKind } from "./lexer.js";
+import { type Token, TokenKind } from "./lexer.js";
 import type {
   Expr,
   Stmt,
   Program,
-  FunctionExpr,
   ObjectLit,
   AssignExpr,
   IdentExpr,
   MemberExpr,
 } from "./ast.js";
+import { FunctionExpr, functions } from "./arenas.js";
 
 export function parse(tokens: Token[]): Program {
   let pos = 0;
@@ -47,7 +47,7 @@ export function parse(tokens: Token[]): Program {
     while (!at(TokenKind.EOF)) {
       body.push(parseStmt());
     }
-    return { kind: "program", body };
+    return { kind: "program", body, hash: "[program]" };
   }
 
   function parseStmt(): Stmt {
@@ -212,22 +212,41 @@ export function parse(tokens: Token[]): Program {
       return { kind: "null", line: tok.line };
     }
 
+    if (at(TokenKind.Label)) {
+      const label = advance().value;
+      expect(TokenKind.Colon, "Expected ':' after label");
+      if (at(TokenKind.LBrace)) {
+        return parseObjectLit(label);
+      }
+      if (at(TokenKind.LParen)) {
+        const params = parseParams();
+        return parseArrow(params, tok.line, label);
+      }
+      if (at(TokenKind.Ident)) {
+        const param = advance();
+        return parseArrow([param.value], tok.line, label);
+      }
+      throw new Error(
+        `Expected function or object after label '${label}' at ${tok.line}:${tok.col}`,
+      );
+    }
+
     if (at(TokenKind.Ident)) {
       advance();
-      if (at(TokenKind.Arrow)) {
-        return parseArrow([tok.value], tok.line);
-      }
       return { kind: "ident", name: tok.value, line: tok.line };
     }
 
     if (at(TokenKind.LBrace)) {
-      return parseObjectLit();
+      throw new Error(
+        `Object literal requires a label (e.g. 'name: { ... }) at ${tok.line}:${tok.col}`,
+      );
     }
 
     if (at(TokenKind.LParen)) {
       if (isArrowParams()) {
-        const params = parseParams();
-        return parseArrow(params, tok.line);
+        throw new Error(
+          `Arrow function requires a label (e.g. 'name: (args) => ...) at ${tok.line}:${tok.col}`,
+        );
       }
       advance();
       const expr = parseExpr();
@@ -240,23 +259,23 @@ export function parse(tokens: Token[]): Program {
     );
   }
 
-  function parseArrow(params: string[], line: number): FunctionExpr {
+  function parseArrow(
+    params: string[],
+    line: number,
+    label: string,
+  ): FunctionExpr {
     expect(TokenKind.Arrow);
     if (at(TokenKind.LBrace)) {
       const body = parseBlockBody();
-      return { kind: "function", params, body, line, hash: `fn@${line}` };
+      const id = functions.alloc(params, body, line, label);
+      return functions.get(id);
     }
     const expr = parseAssign();
-    return {
-      kind: "function",
-      params,
-      body: [{ kind: "return", value: expr, line: expr.line }],
-      line,
-      hash: `fn@${line}`,
-    };
+    const id = functions.alloc(params, [{ kind: "return", value: expr, line: expr.line }], line, label);
+    return functions.get(id);
   }
 
-  function parseObjectLit(): ObjectLit {
+  function parseObjectLit(label: string): ObjectLit {
     const tok = expect(TokenKind.LBrace);
     const properties: { key: string; value: Expr }[] = [];
 
@@ -273,7 +292,7 @@ export function parse(tokens: Token[]): Program {
       kind: "object",
       properties,
       line: tok.line,
-      hash: `obj@${tok.line}`,
+      hash: label,
     };
   }
 
