@@ -9,36 +9,43 @@ import type {
   Program,
   Stmt,
 } from "./ast.js";
-import { AbstractObject, Place, PossibleValues } from "./kleene.js";
-import type { GraphNode } from "./callgraph.js";
-import type { Owner } from "./kleene.js";
+import {
+  type PlaceId,
+  type AbstractObjectId,
+  type Owner,
+  places,
+  objects,
+  PossibleValues,
+} from "./kleene.js";
 
 export interface FunctionInfo {
-  params: Place[];
-  returnVar: Place;
+  params: PlaceId[];
+  returnVar: PlaceId;
   owner: Owner;
 }
 
+type FunctionNode = Program | FunctionExpr;
+
 export interface PlaceMap {
-  /** variable declarations → their Place */
-  variables: Map<LetStmt, Place>;
+  /** variable declarations → their PlaceId */
+  variables: Map<LetStmt, PlaceId>;
   /** function/program nodes → params, return var, owner */
-  functions: Map<GraphNode, FunctionInfo>;
+  functions: Map<FunctionNode, FunctionInfo>;
   /** what each expression resolves to statically */
-  exprResolution: Map<Expr, Place | PossibleValues | null>;
+  exprResolution: Map<Expr, PlaceId | PossibleValues | null>;
   /** nesting: child owner → parent owner (null for top-level program) */
   nesting: Map<Owner, Owner | null>;
 }
 
 class Scope {
-  private stack: { name: string; place: Place }[] = [];
+  private stack: { name: string; place: PlaceId }[] = [];
   private marks: number[] = [];
 
-  declare(name: string, place: Place) {
+  declare(name: string, place: PlaceId) {
     this.stack.push({ name, place });
   }
 
-  lookup(name: string): Place | undefined {
+  lookup(name: string): PlaceId | undefined {
     for (let i = this.stack.length - 1; i >= 0; i--) {
       if (this.stack[i]!.name === name) return this.stack[i]!.place;
     }
@@ -54,11 +61,10 @@ class Scope {
   }
 }
 
-type FunctionNode = Program | FunctionExpr;
 export function buildPlaces(program: Program): PlaceMap {
-  const variables = new Map<LetStmt, Place>();
+  const variables = new Map<LetStmt, PlaceId>();
   const functions = new Map<FunctionNode, FunctionInfo>();
-  const exprResolution = new Map<Expr, Place | PossibleValues | null>();
+  const exprResolution = new Map<Expr, PlaceId | PossibleValues | null>();
   const nesting = new Map<Owner, Owner | null>();
   const scope = new Scope();
   let fnNodeStack: FunctionNode[] = [program];
@@ -73,7 +79,7 @@ export function buildPlaces(program: Program): PlaceMap {
     for (const stmt of stmts) {
       switch (stmt.kind) {
         case "let": {
-          const place = new Place(stmt.name, currentOwner());
+          const place = places.alloc(stmt.name, currentOwner());
           variables.set(stmt, place);
           scope.declare(stmt.name, place);
           break;
@@ -93,14 +99,14 @@ export function buildPlaces(program: Program): PlaceMap {
   function walkFunction(node: FunctionNode, params: string[]) {
     fnNodeStack.push(node);
     const owner = currentOwner();
-    const paramPlaces: Place[] = [];
+    const paramPlaces: PlaceId[] = [];
     for (const name of params) {
-      const place = new Place(`${node.hash}.${name}`, owner);
+      const place = places.alloc(`${node.hash}.${name}`, owner);
       paramPlaces.push(place);
       scope.declare(name, place);
     }
 
-    const returnVar = new Place(`${node.hash}.return`, owner);
+    const returnVar = places.alloc(`${node.hash}.return`, owner);
 
     functions.set(node, {
       params: paramPlaces,
@@ -146,21 +152,22 @@ export function buildPlaces(program: Program): PlaceMap {
     }
   }
 
-  function humanReadable(x: Place | PossibleValues | null) {
-    if (!x) return "unknown";
-    if (x instanceof Place) return x.name;
-    const object = x.objects.values().next().value!;
+  function humanReadable(x: PlaceId | PossibleValues | null): string {
+    if (x == null) return "unknown";
+    if (typeof x === "number") return places.get(x).name;
+    const object = x.objects.values().next().value;
+    if (object !== undefined) return objects.get(object).name;
     const fn = x.functions.values().next().value;
-    return object?.name || fn?.hash;
+    return fn?.hash ?? "unknown";
   }
 
-  function walkExpr(expr: Expr): Place | PossibleValues | null {
-    let result: Place | PossibleValues | null;
+  function walkExpr(expr: Expr): PlaceId | PossibleValues | null {
+    let result: PlaceId | PossibleValues | null;
 
     switch (expr.kind) {
       case "ident": {
         const place = scope.lookup(expr.name);
-        if (place) {
+        if (place !== undefined) {
           result = place;
         } else {
           throw new Error(
@@ -174,11 +181,11 @@ export function buildPlaces(program: Program): PlaceMap {
         result = null;
         break;
       case "object": {
-        const object = new AbstractObject(expr.hash, currentOwner());
+        const objId = objects.alloc(expr.hash, currentOwner());
         for (const prop of expr.properties) {
           walkExpr(prop.value);
         }
-        result = new PossibleValues(new Set([object]));
+        result = new PossibleValues(new Set([objId]));
         break;
       }
       case "function": {
@@ -187,14 +194,14 @@ export function buildPlaces(program: Program): PlaceMap {
         scope.push();
         walkFunction(expr, expr.params);
         scope.pop();
-        result = new PossibleValues(new Set(), new Set([expr])); // need to decide what to do here
+        result = new PossibleValues(new Set(), new Set([expr]));
         break;
       }
       case "call": {
         const callee = walkExpr(expr.callee);
         for (const arg of expr.args) walkExpr(arg);
 
-        result = new Place(
+        result = places.alloc(
           `call(${humanReadable(callee)}@${expr.line})`,
           currentOwner(),
         );
@@ -202,7 +209,7 @@ export function buildPlaces(program: Program): PlaceMap {
       }
       case "member": {
         const base = walkExpr(expr.object);
-        result = new Place(
+        result = places.alloc(
           `${humanReadable(base)}.${expr.property}@${expr.line}`,
           currentOwner(),
         );

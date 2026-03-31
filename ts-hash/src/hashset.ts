@@ -1,3 +1,5 @@
+import { Hasher } from "./hasher.js";
+
 /**
  * A hash set backed by Map<string, T> where keys are hash strings.
  * Assumes no collisions (safe with 128-bit siphash for practical sizes).
@@ -59,5 +61,12 @@ export class HashSet<T> {
 
   forEach(fn: (value: T) => void): void {
     this._map.forEach(fn);
+  }
+
+  /** Hash the set itself — order-independent structural hash of its element hashes. */
+  hashInto(h: Hasher): void {
+    const keys = [...this._map.keys()].sort();
+    h.u32(keys.length);
+    for (const k of keys) h.str(k);
   }
 }

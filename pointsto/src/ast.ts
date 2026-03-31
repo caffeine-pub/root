@@ -1,5 +1,7 @@
 // ---- Expressions ----
 
+import { FunctionExpr } from "./arenas.js";
+
 export type Expr =
   | IdentExpr
   | NumberLit
@@ -30,14 +32,6 @@ export interface NullLit {
 export interface ObjectLit {
   kind: "object";
   properties: { key: string; value: Expr }[];
-  line: number;
-  hash: string;
-}
-
-export interface FunctionExpr {
-  kind: "function";
-  params: string[];
-  body: Stmt[];
   line: number;
   hash: string;
 }

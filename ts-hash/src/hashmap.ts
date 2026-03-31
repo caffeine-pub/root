@@ -1,3 +1,5 @@
+import type { Hasher } from "./hasher.js";
+
 /**
  * A hash map backed by Map<string, {key, value}> where string keys are hash strings.
  * Assumes no collisions (safe with 128-bit siphash for practical sizes).
@@ -74,6 +76,17 @@ export class HashMap<K, V> {
   forEach(fn: (value: V, key: K) => void): void {
     for (const { key, value } of this._map.values()) {
       fn(value, key);
+    }
+  }
+
+  /** Hash the map itself — order-independent structural hash of key-value pairs. */
+  hashInto(h: Hasher, hashValue: (v: V, h: Hasher) => void): void {
+    // sort by key hash for order independence, then hash each key-value pair
+    const entries = [...this._map.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+    h.u32(entries.length);
+    for (const [keyHash, { value }] of entries) {
+      h.str(keyHash);
+      hashValue(value, h);
     }
   }
 }

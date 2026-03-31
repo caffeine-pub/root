@@ -3,12 +3,12 @@ import type {
   Expr,
   Stmt,
   Program,
-  FunctionExpr,
   ObjectLit,
   AssignExpr,
   IdentExpr,
   MemberExpr,
 } from "./ast.js";
+import { FunctionExpr, functions } from "./arenas.js";
 
 export function parse(tokens: Token[]): Program {
   let pos = 0;
@@ -267,16 +267,12 @@ export function parse(tokens: Token[]): Program {
     expect(TokenKind.Arrow);
     if (at(TokenKind.LBrace)) {
       const body = parseBlockBody();
-      return { kind: "function", params, body, line, hash: label };
+      const id = functions.alloc(params, body, line, label);
+      return functions.get(id);
     }
     const expr = parseAssign();
-    return {
-      kind: "function",
-      params,
-      body: [{ kind: "return", value: expr, line: expr.line }],
-      line,
-      hash: label,
-    };
+    const id = functions.alloc(params, [{ kind: "return", value: expr, line: expr.line }], line, label);
+    return functions.get(id);
   }
 
   function parseObjectLit(label: string): ObjectLit {

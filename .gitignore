@@ -8,6 +8,7 @@ node_modules/
 .re.pid
 package.json
 tsconfig.json
+*.tsbuildinfo
 pnpm-workspace.yaml
 pnpm-lock.yaml
 .npmrc

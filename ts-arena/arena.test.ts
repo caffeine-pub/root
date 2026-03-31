@@ -1,21 +1,21 @@
 import { describe, it, expect } from "vitest";
 import { Arena, type Id, type Poolable } from "./index.js";
 
-class Point implements Poolable<[number, number]> {
+class Point implements Poolable<Id<"Point">, [number, number]> {
   x!: number;
   y!: number;
   constructor() {}
-  create(x: number, y: number) {
+  create(_id: Id<"Point">, x: number, y: number) {
     this.x = x;
     this.y = y;
   }
 }
 
-class Entity implements Poolable<[string, number]> {
+class Entity implements Poolable<Id<"Entity">, [string, number]> {
   name!: string;
   hp!: number;
   constructor() {}
-  create(name: string, hp: number) {
+  create(_id: Id<"Entity">, name: string, hp: number) {
     this.name = name;
     this.hp = hp;
   }

@@ -28,10 +28,10 @@ export type Id<Brand extends string> = number & { readonly [__brand]: Brand };
 /**
  * Any class that can be arena-managed must have:
  * - A no-arg constructor
- * - A `create` method that initializes all fields
+ * - A `create` method that receives its own id + init args
  */
-export interface Poolable<Args extends unknown[] = unknown[]> {
-  create(...args: Args): void;
+export interface Poolable<I extends Id<string> = Id<string>, Args extends unknown[] = unknown[]> {
+  create(id: I, ...args: Args): void;
 }
 
 export type PoolableConstructor<T extends Poolable> = new () => T;
@@ -72,9 +72,10 @@ export class Arena<I extends Id<string>, T extends Poolable> {
 
   /**
    * Allocate a new object (or recycle a freed one) and initialize it.
+   * The id is automatically passed as the first arg to create().
    * @pre create() must not throw. If it does, the arena is in an invalid state.
    */
-  alloc(...args: Parameters<T["create"]>): I {
+  alloc(...args: T["create"] extends (id: I, ...rest: infer R) => void ? R : never): I {
     let slot: number;
     let obj: T;
 
@@ -87,9 +88,10 @@ export class Arena<I extends Id<string>, T extends Poolable> {
       this.pool.push(obj);
     }
 
+    const id = slot as unknown as I;
     this.live.add(slot);
-    obj.create(...args);
-    return slot as unknown as I;
+    obj.create(id, ...args);
+    return id;
   }
 
   /**
