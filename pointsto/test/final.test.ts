@@ -297,3 +297,118 @@ describe("tree recursion", () => {
     expectPointsTo(r, "leftLeft", "leaf");
   });
 });
+
+describe("stress: deep callback chains", () => {
+  it("passes callback through 3 wrappers", () => {
+    const r = pointsTo(`
+      let w1 = 'w1: (f) => { return w2(f); };
+      let w2 = 'w2: (f) => { return w3(f); };
+      let w3 = 'w3: (f) => { return f(); };
+      let target = 'target: {};
+      let result = w1('cb: () => { return target; });
+    `);
+    expectPointsTo(r, "result", "target");
+  });
+
+  it("compose two functions", () => {
+    const r = pointsTo(`
+      let compose = 'compose: (f, g, x) => {
+        return f(g(x));
+      };
+      let wrap = 'wrap: (v) => {
+        return 'box: { val: v };
+      };
+      let id = 'id: (x) => { return x; };
+      let thing = 'thing: {};
+      let result = compose(wrap, id, thing);
+    `);
+    // compose(wrap, id, thing) → wrap(id(thing)) → wrap(thing) → {val: thing}
+    // object created inside instantiated wrap gets _instant suffix
+    expectPointsTo(r, "result", "box_instant");
+    // check the field
+    const r2 = pointsTo(`
+      let compose = 'compose: (f, g, x) => {
+        return f(g(x));
+      };
+      let wrap = 'wrap: (v) => {
+        return 'box: { val: v };
+      };
+      let id = 'id: (x) => { return x; };
+      let thing = 'thing: {};
+      let result = compose(wrap, id, thing);
+      let inner = result.val;
+    `);
+    expectPointsTo(r2, "inner", "thing");
+  });
+});
+
+describe("stress: recursive data + higher-order", () => {
+  it("map over linked list nodes", () => {
+    const r = pointsTo(`
+      let map = 'map: (f, node) => {
+        return 'mapped: { val: f(node.val) };
+      };
+      let myFn = 'myFn: (x) => { return 'wrapped: { inner: x }; };
+      let list = 'list: { val: 'item: {} };
+      let result = map(myFn, list);
+      let inner = result.val.inner;
+    `);
+    expectPointsTo(r, "inner", "item");
+  });
+});
+
+describe("stress: CPS-style", () => {
+  it("continuation-passing style", () => {
+    const r = pointsTo(`
+      let cps = 'cps: (val, k) => {
+        return k(val);
+      };
+      let obj = 'obj: {};
+      let id = 'idK: (x) => { return x; };
+      let result = cps(obj, id);
+    `);
+    expectPointsTo(r, "result", "obj");
+  });
+
+  it("double CPS", () => {
+    const r = pointsTo(`
+      let cps = 'cps: (val, k) => {
+        return k(val);
+      };
+      let obj = 'obj: {};
+      let wrap = 'wrap: (x) => { return 'box: { v: x }; };
+      let step1 = cps(obj, wrap);
+      let result = cps(step1, 'unwrap: (b) => { return b.v; });
+    `);
+    expectPointsTo(r, "result", "obj");
+  });
+});
+
+describe("stress: method dispatch simulation", () => {
+  it("object with method field called indirectly", () => {
+    const r = pointsTo(`
+      let handler = 'handler: (x) => { return 'result: { data: x }; };
+      let obj = 'obj: { method: handler };
+      let m = obj.method;
+      let arg = 'arg: {};
+      let result = m(arg);
+      let d = result.data;
+    `);
+    expectPointsTo(r, "d", "arg");
+  });
+
+  it("factory returning object with methods", () => {
+    const r = pointsTo(`
+      let makeObj = 'makeObj: (initial) => {
+        return 'obj: {
+          get: 'getter: (unused) => { return initial; }
+        };
+      };
+      let thing = 'thing: {};
+      let o = makeObj(thing);
+      let getter = o.get;
+      let result = getter('dummy: {});
+    `);
+    expectPointsTo(r, "result", "thing");
+  });
+});
