@@ -173,3 +173,32 @@ describe("multiple objects through one variable", () => {
     expectFunctions(state, "rb", "f");
   });
 });
+
+describe("duplicate call sites", () => {
+  it("two calls to same function with same arg produce independent results", () => {
+    const state = run(`
+      let id = 'id: (x) => { return x; };
+      let obj1 = 'o1: {};
+      let obj2 = 'o2: {};
+      let a = id(obj1);
+      let b = id(obj2);
+    `);
+    // a should get o1 only, b should get o2 only
+    expectObjects(state, "a", "o1");
+    expectObjects(state, "b", "o2");
+  });
+
+  it("two calls with same arg still wire return values independently", () => {
+    const state = run(`
+      let make = 'make: (x) => { return 'inner: { val: x }; };
+      let obj = 'obj: {};
+      let a = make(obj);
+      let b = make(obj);
+      let av = a.val;
+      let bv = b.val;
+    `);
+    // both a and b should get inner objects, both should have val → obj
+    expectObjects(state, "av", "obj");
+    expectObjects(state, "bv", "obj");
+  });
+});

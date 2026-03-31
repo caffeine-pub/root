@@ -1,4 +1,4 @@
-import { Hasher } from "./hasher.js";
+import type { Hasher } from "./hasher.js";
 
 /**
  * A hash set backed by Map<string, T> where keys are hash strings.

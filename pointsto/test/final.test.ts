@@ -12,7 +12,7 @@ function pointsTo(source: string): Map<string, Set<string>> {
     const name = places.get(placeId).name;
     const labels = new Set<string>();
     for (const objId of values.objects) labels.add(objects.get(objId).name);
-    for (const fn of values.functions) labels.add(fn.label);
+    for (const fn of values.functions) labels.add('expr' in fn ? fn.expr.label : fn.label);
     if (labels.size > 0) result.set(name, labels);
   }
   return result;
@@ -410,5 +410,49 @@ describe("stress: method dispatch simulation", () => {
       let result = getter('dummy: {});
     `);
     expectPointsTo(r, "result", "thing");
+  });
+});
+
+describe("currying", () => {
+  it("curried function applies arguments one at a time", () => {
+    const r = pointsTo(`
+      let curry = 'curry: (x) => {
+        return 'inner: (y) => {
+          return 'pair: { a: x, b: y };
+        };
+      };
+      let obj1 = 'o1: {};
+      let obj2 = 'o2: {};
+      let partial = curry(obj1);
+      let result = partial(obj2);
+      let ra = result.a;
+      let rb = result.b;
+    `);
+    expectPointsTo(r, "ra", "o1");
+    expectPointsTo(r, "rb", "o2");
+  });
+
+  // Known limitation: inner closures from different instantiations of the
+  // same outer function share a single FunctionExpr, so captured values merge.
+  // Full context sensitivity (cloning inner closures per instantiation) needed.
+  it.skip("curried function reused with different first args", () => {
+    const r = pointsTo(`
+      let curry = 'curry: (x) => {
+        return 'inner: (y) => {
+          return 'pair: { a: x, b: y };
+        };
+      };
+      let o1 = 'o1: {};
+      let o2 = 'o2: {};
+      let o3 = 'o3: {};
+      let f1 = curry(o1);
+      let f2 = curry(o2);
+      let r1 = f1(o3);
+      let r2 = f2(o3);
+      let r1a = r1.a;
+      let r2a = r2.a;
+    `);
+    expectPointsTo(r, "r1a", "o1");
+    expectPointsTo(r, "r2a", "o2");
   });
 });

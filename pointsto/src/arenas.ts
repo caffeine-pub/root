@@ -30,7 +30,7 @@ export class FunctionExpr {
     this.label = label;
   }
 
-  hash() {
+  get hash(): string {
     return this.id.toString();
   }
 }
@@ -76,6 +76,15 @@ export class AbstractObject
 export const objects = new Arena<AbstractObjectId, AbstractObject>(
   AbstractObject,
 );
+
+// ---- Reset ----
+
+/** Clear all arenas. Call before starting a new analysis session. */
+export function resetArenas(): void {
+  functions.clear();
+  places.clear();
+  objects.clear();
+}
 
 // ---- Helpers ----
 

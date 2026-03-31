@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { lex } from "../src/lexer.js";
+import { lex, TokenKind } from "../src/lexer.js";
 import { parse } from "../src/parser.js";
 import type { Program, Stmt, Expr } from "../src/ast.js";
 
@@ -33,6 +33,7 @@ describe("lexer", () => {
 
   it("lexes labels", () => {
     const tokens = lex("'abc");
+    expect(tokens[0]!.kind).toBe(TokenKind.Label);
     expect(tokens[0]!.value).toBe("abc");
   });
 

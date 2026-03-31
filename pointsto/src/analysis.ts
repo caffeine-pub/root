@@ -228,8 +228,8 @@ class Iteration {
         // Program node — walk body
         this.currentFunction = fn;
         for (const stmt of fn.body) {
-          const shouldContinue = this.stmt(stmt);
-          if (!shouldContinue) break;
+          const flow = this.stmt(stmt);
+          if (flow !== "continue") break;
         }
       }
     }
@@ -267,8 +267,8 @@ class Iteration {
     this.currentFunction = fnExpr;
 
     for (const stmt of fnExpr.body) {
-      const shouldContinue = this.stmt(stmt);
-      if (!shouldContinue) break;
+      const flow = this.stmt(stmt);
+      if (flow !== "continue") break;
     }
 
     const fnConstraints = this.constraints;
@@ -283,45 +283,52 @@ class Iteration {
     return fnConstraints;
   }
 
-  stmt(stmt: Stmt): boolean {
+  /** Returns "continue" if control flows to next stmt, "break" to exit loop, "return" to exit function */
+  stmt(stmt: Stmt): "continue" | "break" | "return" {
     switch (stmt.kind) {
       case "expr":
         this.expr(stmt.expr);
-        return true;
+        return "continue";
       case "let": {
         const lhs = this.placeMap.variables.get(stmt)!;
         if (stmt.init) {
           const rhs = this.expr(stmt.init);
           if (rhs != null) this.constraints.push(new SubsetConstraint(lhs, rhs));
         }
-        return true;
+        return "continue";
       }
       case "if": {
-        let firstContinues = true;
+        let firstFlow: "continue" | "break" | "return" = "continue";
         for (const s of stmt.then) {
-          firstContinues = this.stmt(s);
-          if (!firstContinues) break;
+          firstFlow = this.stmt(s);
+          if (firstFlow !== "continue") break;
         }
 
-        let secondContinues = true;
+        let secondFlow: "continue" | "break" | "return" = "continue";
         if (stmt.else_) {
           for (const s of stmt.else_) {
-            secondContinues = this.stmt(s);
-            if (!secondContinues) break;
+            secondFlow = this.stmt(s);
+            if (secondFlow !== "continue") break;
           }
         }
 
-        return firstContinues || secondContinues;
+        // if either branch continues, the whole if continues
+        if (firstFlow === "continue" || secondFlow === "continue") return "continue";
+        // if both return, the whole if returns
+        if (firstFlow === "return" && secondFlow === "return") return "return";
+        // mixed break/return: conservatively continue (break only meaningful inside loop)
+        return "continue";
       }
       case "loop": {
         for (const s of stmt.body) {
-          const shouldContinue = this.stmt(s);
-          if (!shouldContinue) break;
+          const flow = this.stmt(s);
+          if (flow === "break") break;
+          if (flow === "return") return "return"; // return propagates past loop
         }
-        return true;
+        return "continue";
       }
       case "break":
-        return false;
+        return "break";
       case "return": {
         debug("processing return at line", stmt.line);
         if (stmt.value) {
@@ -334,14 +341,14 @@ class Iteration {
             this.currentFunction.hash,
           );
         }
-        return false;
+        return "return";
       }
       case "block": {
         for (const stmt2 of stmt.body) {
-          const shouldContinue = this.stmt(stmt2);
-          if (!shouldContinue) return false;
+          const flow = this.stmt(stmt2);
+          if (flow !== "continue") return flow;
         }
-        return true;
+        return "continue";
       }
     }
   }
