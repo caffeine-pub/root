@@ -8,8 +8,9 @@ interface NavProps {
 }
 
 const defaultLinks = [
-  { href: "https://github.com/caffeine-pub", label: "github", external: true },
+  { href: "/blog", label: "blog", external: false },
   { href: "/roadmap", label: "roadmap", external: false },
+  { href: "https://github.com/caffeine-pub", label: "github", external: true },
 ];
 
 export function Nav(props: NavProps) {
