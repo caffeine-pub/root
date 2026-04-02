@@ -414,11 +414,9 @@ export default function LogPost() {
   return (
     <div class="page">
       <Show when={post()}>
-        {(p) => {
-          const data = p();
-          return (
+        {(p) => (
             <>
-              <Title>{data.title} — caffeine.pub</Title>
+              <Title>{p().title} — caffeine.pub</Title>
               <Nav
                 links={[
                   { href: "/log", label: "log" },
@@ -429,8 +427,8 @@ export default function LogPost() {
 
               <div class="post-header">
                 <div class="post-meta">
-                  <span class="post-date">{formatDate(data.date)}</span>
-                  {data.tags.map((tag) => {
+                  <span class="post-date">{formatDate(p().date)}</span>
+                  {p().tags.map((tag) => {
                     const colors = tagColors[tag] ?? tagColors.tooling;
                     return (
                       <span
@@ -441,13 +439,13 @@ export default function LogPost() {
                       </span>
                     );
                   })}
-                  <span class="post-reading">{readingTime(data.html)} min read</span>
+                  <span class="post-reading">{readingTime(p().html)} min read</span>
                 </div>
-                <h1 class="post-title">{data.title}</h1>
-                <p class="lead">{data.excerpt}</p>
+                <h1 class="post-title">{p().title}</h1>
+                <p class="lead">{p().excerpt}</p>
               </div>
 
-              <div class="article" innerHTML={data.html} />
+              <div class="article" innerHTML={p().html} />
 
               <div class="post-nav">
                 <Show when={adjacent().prev}>
@@ -468,8 +466,7 @@ export default function LogPost() {
                 </Show>
               </div>
             </>
-          );
-        }}
+        )}
       </Show>
 
       <Show when={post.loading}>
