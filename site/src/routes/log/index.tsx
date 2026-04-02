@@ -3,15 +3,7 @@ import { css } from "solid-styled";
 import { For, Show } from "solid-js";
 import { Nav, Link } from "~/ui";
 import { getAllPosts, type PostMeta } from "~/lib/markdown";
-
-const tagColors: Record<string, { bg: string; color: string }> = {
-  compiler: { bg: "var(--yellow-light)", color: "#b8860b" },
-  design: { bg: "#f3e8ff", color: "#9333ea" },
-  types: { bg: "#eff6ff", color: "#3b82f6" },
-  runtime: { bg: "#ecfdf5", color: "#22c55e" },
-  meta: { bg: "#fdf2f8", color: "#ec4899" },
-  tooling: { bg: "#f0f0ed", color: "var(--fg-dim)" },
-};
+import { tagColors } from "~/lib/tags";
 
 function PostTag(props: { tag: string }) {
   const style = () => tagColors[props.tag] ?? tagColors.tooling;
