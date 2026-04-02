@@ -45,7 +45,7 @@ export default function LogPost() {
 
   css`
     div.page {
-      max-width: 720px;
+      max-width: 760px;
       margin: 0 auto;
       padding: 2.5rem 2rem 6rem;
     }
@@ -95,16 +95,21 @@ export default function LogPost() {
     }
     p.lead {
       font-size: 1.15rem;
-      line-height: 1.65;
-      color: var(--fg-mid);
+      font-weight: 500;
+      line-height: 1.75;
+      color: #2d2d2d;
+      letter-spacing: 0.003em;
       max-width: 600px;
     }
 
     /* --- ARTICLE BODY --- */
     div.article {
       line-height: 1.75;
-      font-size: 1.02rem;
-      color: var(--fg);
+      font-size: 1.12rem;
+      font-weight: 500;
+      color: #000;
+      text-rendering: optimizeLegibility;
+      letter-spacing: 0.003em;
     }
 
     /* Headings */
@@ -142,7 +147,7 @@ export default function LogPost() {
     /* Paragraphs */
     div.article :global(p) {
       margin-bottom: 1.25rem;
-      color: var(--fg-mid);
+      color: #2d2d2d;
     }
 
     /* Links */
@@ -245,8 +250,8 @@ export default function LogPost() {
       color: var(--fg-mid);
     }
     div.article :global(li) {
-      margin-bottom: 0.4rem;
-      line-height: 1.65;
+      margin-bottom: 0.85rem;
+      line-height: 1.75;
       padding-left: 0.3rem;
     }
     div.article :global(li::marker) {

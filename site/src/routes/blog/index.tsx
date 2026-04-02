@@ -77,13 +77,6 @@ function PostItem(props: { post: PostMeta }) {
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
-    span.post-author {
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      color: var(--fg-faint);
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
     div.post-tags {
       display: flex;
       gap: 0.35rem;
@@ -115,7 +108,6 @@ function PostItem(props: { post: PostMeta }) {
         <div class="post-title">{props.post.title}</div>
         <div class="post-excerpt">{props.post.excerpt}</div>
       </div>
-      <span class="post-author">{props.post.author}</span>
       <div class="post-tags">
         <For each={props.post.tags}>{(tag) => <PostTag tag={tag} />}</For>
       </div>
