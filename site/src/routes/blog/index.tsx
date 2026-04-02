@@ -180,101 +180,6 @@ function PinnedPost(props: { post: PostMeta }) {
   );
 }
 
-function SubscribeMock() {
-  css`
-    div.subscribe {
-      margin-top: 1rem;
-      padding: 1.5rem 1.8rem;
-      background: var(--fg);
-      color: var(--bg);
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1.5rem;
-      flex-wrap: wrap;
-    }
-    h3.sub-title {
-      font-family: var(--grotesk);
-      font-size: 1.1rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      margin-bottom: 0.2rem;
-    }
-    p.sub-desc {
-      font-size: 0.85rem;
-      color: #999;
-      line-height: 1.4;
-    }
-    div.sub-form {
-      display: flex;
-      gap: 0.4rem;
-      flex-shrink: 0;
-    }
-    input.sub-input {
-      font-family: var(--mono);
-      font-size: 0.8rem;
-      padding: 0.55rem 0.8rem;
-      background: #2a2a2a;
-      border: 1px solid #444;
-      border-radius: 6px;
-      color: #fff;
-      outline: none;
-      width: 180px;
-      transition: border-color 0.15s ease;
-    }
-    input.sub-input::placeholder {
-      color: #666;
-    }
-    input.sub-input:focus {
-      border-color: var(--yellow);
-    }
-    button.sub-btn {
-      font-family: var(--mono);
-      font-size: 0.8rem;
-      font-weight: 500;
-      padding: 0.55rem 1rem;
-      background: var(--yellow);
-      color: var(--fg);
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.12s ease;
-      white-space: nowrap;
-    }
-    button.sub-btn:hover {
-      background: var(--yellow-hover);
-    }
-
-    @media (max-width: 600px) {
-      div.subscribe {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-      div.sub-form {
-        width: 100%;
-      }
-      input.sub-input {
-        flex: 1;
-        width: auto;
-      }
-    }
-  `;
-
-  return (
-    <div class="subscribe">
-      <div>
-        <h3 class="sub-title">get the blog in your inbox</h3>
-        <p class="sub-desc">New posts only. No spam. Unsubscribe whenever.</p>
-      </div>
-      <div class="sub-form">
-        <input class="sub-input" type="email" placeholder="you@example.com" />
-        <button class="sub-btn" type="button">subscribe</button>
-      </div>
-    </div>
-  );
-}
-
 export default function LogIndex() {
   const allPosts = getAllPosts();
   const pinned = () => allPosts.filter((p) => p.pinned);
@@ -392,7 +297,7 @@ export default function LogIndex() {
         )}
       </For>
 
-      <SubscribeMock />
+
     </div>
   );
 }
