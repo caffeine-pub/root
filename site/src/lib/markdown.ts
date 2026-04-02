@@ -166,9 +166,12 @@ export async function renderMarkdown(raw: string): Promise<Post> {
   };
 }
 
+// TODO: move glob-based post loading behind a server boundary when the archive grows.
+// Currently all markdown is embedded in the client bundle via eager import.meta.glob.
+// Fine for <20 posts; revisit with SolidStart's cache/createAsync pattern at scale.
 export function getAllPosts(): PostMeta[] {
   // Import all markdown files at build time
-  const modules = import.meta.glob("../content/log/*.md", {
+  const modules = import.meta.glob("../content/blog/*.md", {
     query: "?raw",
     eager: true,
     import: "default",
@@ -197,7 +200,7 @@ export function getAllPosts(): PostMeta[] {
 }
 
 export function getPostBySlug(slug: string): string | null {
-  const modules = import.meta.glob("../content/log/*.md", {
+  const modules = import.meta.glob("../content/blog/*.md", {
     query: "?raw",
     eager: true,
     import: "default",

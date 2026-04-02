@@ -419,7 +419,7 @@ export default function LogPost() {
               <Title>{p().title} — caffeine.pub</Title>
               <Nav
                 links={[
-                  { href: "/log", label: "log" },
+                  { href: "/blog", label: "blog" },
                   { href: "/roadmap", label: "roadmap" },
                   { href: "https://github.com/caffeine-pub", label: "github", external: true },
                 ]}
@@ -450,7 +450,7 @@ export default function LogPost() {
               <div class="post-nav">
                 <Show when={adjacent().prev}>
                   {(prev) => (
-                    <a class="nav-link" href={`/log/${prev().slug}`}>
+                    <a class="nav-link" href={`/blog/${prev().slug}`}>
                       <div class="nav-label">← previous</div>
                       <div class="nav-title">{prev().title}</div>
                     </a>
@@ -458,7 +458,7 @@ export default function LogPost() {
                 </Show>
                 <Show when={adjacent().next}>
                   {(next) => (
-                    <a class="nav-link nav-next" href={`/log/${next().slug}`}>
+                    <a class="nav-link nav-next" href={`/blog/${next().slug}`}>
                       <div class="nav-label">next →</div>
                       <div class="nav-title">{next().title}</div>
                     </a>
@@ -472,7 +472,7 @@ export default function LogPost() {
       <Show when={post.loading}>
         <Nav
           links={[
-            { href: "/log", label: "log" },
+            { href: "/blog", label: "blog" },
             { href: "/roadmap", label: "roadmap" },
             { href: "https://github.com/caffeine-pub", label: "github", external: true },
           ]}
@@ -485,7 +485,7 @@ export default function LogPost() {
       <Show when={!post.loading && !post()}>
         <Nav
           links={[
-            { href: "/log", label: "log" },
+            { href: "/blog", label: "blog" },
             { href: "/roadmap", label: "roadmap" },
             { href: "https://github.com/caffeine-pub", label: "github", external: true },
           ]}

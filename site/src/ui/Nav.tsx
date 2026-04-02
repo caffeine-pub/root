@@ -8,7 +8,7 @@ interface NavProps {
 }
 
 const defaultLinks = [
-  { href: "/log", label: "log", external: false },
+  { href: "/blog", label: "blog", external: false },
   { href: "/roadmap", label: "roadmap", external: false },
   { href: "https://github.com/caffeine-pub", label: "github", external: true },
 ];

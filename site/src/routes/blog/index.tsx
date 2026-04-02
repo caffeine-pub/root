@@ -116,7 +116,7 @@ function PostItem(props: { post: PostMeta }) {
   };
 
   return (
-    <a class="post" href={`/log/${props.post.slug}`}>
+    <a class="post" href={`/blog/${props.post.slug}`}>
       <span class="post-date">{date()}</span>
       <div class="post-body">
         <div class="post-title">{props.post.title}</div>
@@ -182,7 +182,7 @@ function PinnedPost(props: { post: PostMeta }) {
   `;
 
   return (
-    <a class="pinned-post" href={`/log/${props.post.slug}`}>
+    <a class="pinned-post" href={`/blog/${props.post.slug}`}>
       <div class="pinned-body">
         <div class="pinned-title">{props.post.title}</div>
         <div class="pinned-excerpt">{props.post.excerpt}</div>
@@ -278,7 +278,7 @@ function SubscribeMock() {
   return (
     <div class="subscribe">
       <div>
-        <h3 class="sub-title">get the log in your inbox</h3>
+        <h3 class="sub-title">get the blog in your inbox</h3>
         <p class="sub-desc">New posts only. No spam. Unsubscribe whenever.</p>
       </div>
       <div class="sub-form">
@@ -373,7 +373,7 @@ export default function LogIndex() {
 
   return (
     <div class="page">
-      <Title>log — caffeine.pub</Title>
+      <Title>blog — caffeine.pub</Title>
       <Nav
         links={[
           { href: "/", label: "home" },
@@ -383,7 +383,7 @@ export default function LogIndex() {
       />
 
       <div class="header">
-        <h1 class="title">the log</h1>
+        <h1 class="title">the blog</h1>
         <p class="subtitle">
           Design notes, compiler archaeology, and the occasional rant about
           why JavaScript doesn't have to be like this.
