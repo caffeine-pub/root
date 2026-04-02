@@ -198,7 +198,7 @@ export default function LogIndex() {
 
   css`
     div.page {
-      max-width: 800px;
+      max-width: 860px;
       margin: 0 auto;
       padding: 2.5rem 2rem 6rem;
     }

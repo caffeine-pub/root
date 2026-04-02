@@ -114,7 +114,9 @@ export default function LogPost() {
 
     /* --- POST HEADER --- */
     div.post-header {
-      margin-bottom: 3rem;
+      margin-bottom: 0;
+      padding-bottom: 3rem;
+      border-bottom: 1px solid var(--line);
     }
     div.post-meta {
       display: flex;
@@ -156,16 +158,18 @@ export default function LogPost() {
       margin-bottom: 1rem;
     }
     p.lead {
-      font-size: 1.15rem;
-      font-weight: 500;
+      font-size: 1.2rem;
+      font-weight: 450;
       line-height: 1.75;
-      color: #2d2d2d;
+      color: var(--fg-mid);
       letter-spacing: 0.003em;
       max-width: 600px;
+
     }
 
     /* --- ARTICLE BODY --- */
     div.article {
+      padding-top: 1.5rem;
       line-height: 1.75;
       font-size: 1.12rem;
       font-weight: 500;
@@ -291,14 +295,14 @@ export default function LogPost() {
 
     /* Blockquotes */
     div.article :global(blockquote) {
-      border-left: 3px solid var(--yellow);
+      border-left: 3px solid var(--fg-faint);
       padding: 0.8rem 1.2rem;
       margin: 1.5rem 0;
-      background: var(--yellow-light);
+      background: #f5f5f3;
       border-radius: 0 8px 8px 0;
     }
     div.article :global(blockquote p) {
-      color: var(--fg-mid);
+      color: #2d2d2d;
       margin-bottom: 0.5rem;
     }
     div.article :global(blockquote p:last-child) {
@@ -359,7 +363,7 @@ export default function LogPost() {
       color: var(--fg-mid);
     }
     div.article :global(tbody tr:hover) {
-      background: var(--yellow-light);
+      background: #f5f5f3;
     }
     div.article :global(td code) {
       font-size: 0.82rem;
@@ -379,7 +383,7 @@ export default function LogPost() {
     div.article :global(.footnote-backref) {
       font-family: var(--mono);
       font-size: 0.85em;
-      color: var(--fg-dim);
+      color: var(--yellow);
       text-decoration: none;
       border-bottom: none;
       margin-left: 0.3rem;
