@@ -1,10 +1,27 @@
 import { Title } from "@solidjs/meta";
 import { css } from "solid-styled";
-import { Show, createResource } from "solid-js";
+import { Show, For, createResource, createSignal, onMount, onCleanup } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { Nav } from "~/ui";
 import { renderMarkdown, getAllPosts, getPostBySlug, type Post, type PostMeta } from "~/lib/markdown";
 import { tagColors } from "~/lib/tags";
+
+interface TocItem {
+  id: string;
+  text: string;
+  level: number;
+}
+
+function extractToc(html: string): TocItem[] {
+  const re = /<h([23])\s+id="([^"]+)"[^>]*>(.*?)<\/h[23]>/gi;
+  const items: TocItem[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    items.push({ level: parseInt(m[1]), id: m[2], text: m[3].replace(/<[^>]+>/g, "") });
+  }
+  return items;
+}
+
 
 function getAdjacentPosts(slug: string): { prev: PostMeta | null; next: PostMeta | null } {
   const all = getAllPosts();
@@ -44,6 +61,51 @@ export default function LogPost() {
   };
 
   css`
+    /* --- TABLE OF CONTENTS --- */
+    nav.toc {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      left: max(1rem, calc((100vw - 760px) / 2 - 300px));
+      width: 260px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+    a.toc-item {
+      font-family: var(--grotesk);
+      font-size: 0.85rem;
+      font-weight: 450;
+      line-height: 1.5;
+      color: var(--fg-faint);
+      text-decoration: none;
+      display: block;
+      letter-spacing: 0.003em;
+      position: relative;
+      padding-left: 0.75rem;
+      border-left: 2px solid transparent;
+      transition: color 0.2s ease, border-color 0.2s ease;
+    }
+    a.toc-item:hover {
+      color: var(--fg-mid);
+    }
+    a.toc-item.active {
+      color: var(--fg);
+      font-weight: 600;
+      border-left-color: var(--fg);
+    }
+    a.toc-item.toc-h1 {
+      font-weight: 600;
+    }
+    a.toc-item.toc-h3 {
+      padding-left: 1.5rem;
+    }
+    @media (max-width: 1200px) {
+      nav.toc {
+        display: none;
+      }
+    }
+
     div.page {
       max-width: 760px;
       margin: 0 auto;
@@ -452,10 +514,52 @@ export default function LogPost() {
                   <span class="post-author">by {p().author}</span>
                   <span class="post-reading">{readingTime(p().html)} min read</span>
                 </div>
-                <h1 class="post-title">{p().title}</h1>
+                <h1 class="post-title" id="title">{p().title}</h1>
                 <p class="lead">{p().excerpt}</p>
               </div>
 
+              {(() => {
+                const items: TocItem[] = [
+                  { id: "title", text: p().title, level: 1 },
+                  ...extractToc(p().html),
+                ];
+                const [activeId, setActiveId] = createSignal("");
+                onMount(() => {
+                  const headings = items
+                    .map((item) => ({ id: item.id, el: document.getElementById(item.id) }))
+                    .filter((h) => h.el != null) as { id: string; el: HTMLElement }[];
+                  const findActive = () => {
+                    const scrollY = window.scrollY + 120;
+                    let active = headings[0]?.id ?? "";
+                    for (const h of headings) {
+                      if (h.el.offsetTop <= scrollY) active = h.id;
+                    }
+                    setActiveId(active);
+                  };
+                  findActive();
+                  window.addEventListener("scroll", findActive, { passive: true });
+                  onCleanup(() => window.removeEventListener("scroll", findActive));
+                });
+                return (
+                  <nav class="toc">
+                    <For each={items}>
+                      {(item) => (
+                        <a
+                          class={`toc-item toc-h${item.level}`}
+                          classList={{ active: activeId() === item.id }}
+                          href={`#${item.id}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            document.getElementById(item.id)?.scrollIntoView({ behavior: "smooth" });
+                          }}
+                        >
+                          {item.text}
+                        </a>
+                      )}
+                    </For>
+                  </nav>
+                );
+              })()}
               <div class="article" innerHTML={p().html} />
 
               <div class="post-nav">
