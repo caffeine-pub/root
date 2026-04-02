@@ -1,6 +1,7 @@
 ---
 title: "why v3 starts with an interpreter"
 date: 2026-03-14
+author: ren
 tags: [compiler]
 pinned: false
 excerpt: "We've written two compilers now. Both got further than expected and failed where predicted. This time we're building the semantics first and the codegen last."

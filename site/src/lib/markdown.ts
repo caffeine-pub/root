@@ -22,6 +22,7 @@ export interface PostMeta {
   slug: string;
   title: string;
   date: string;
+  author: string;
   tags: string[];
   pinned: boolean;
   excerpt: string;
@@ -159,6 +160,7 @@ export async function renderMarkdown(raw: string): Promise<Post> {
     slug: "",
     title: meta.title ?? "Untitled",
     date: meta.date ?? "",
+    author: meta.author ?? "ren",
     tags: meta.tags ?? [],
     pinned: meta.pinned ?? false,
     excerpt: meta.excerpt ?? "",
@@ -187,6 +189,7 @@ export function getAllPosts(): PostMeta[] {
       slug,
       title: meta.title ?? "Untitled",
       date: meta.date ?? "",
+      author: meta.author ?? "ren",
       tags: meta.tags ?? [],
       pinned: meta.pinned ?? false,
       excerpt: meta.excerpt ?? "",

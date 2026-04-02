@@ -75,6 +75,11 @@ export default function LogPost() {
       padding: 0.12rem 0.4rem;
       border-radius: 3px;
     }
+    span.post-author {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--fg-dim);
+    }
     span.post-reading {
       font-family: var(--mono);
       font-size: 0.72rem;
@@ -416,7 +421,7 @@ export default function LogPost() {
       <Show when={post()}>
         {(p) => (
             <>
-              <Title>{p().title} — caffeine.pub</Title>
+              <Title>{p().title} / caffeine.pub</Title>
               <Nav
                 links={[
                   { href: "/blog", label: "blog" },
@@ -439,6 +444,7 @@ export default function LogPost() {
                       </span>
                     );
                   })}
+                  <span class="post-author">by {p().author}</span>
                   <span class="post-reading">{readingTime(p().html)} min read</span>
                 </div>
                 <h1 class="post-title">{p().title}</h1>
