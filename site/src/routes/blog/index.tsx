@@ -44,22 +44,8 @@ function PostItem(props: { post: PostMeta }) {
       text-decoration: none;
       color: inherit;
     }
-    a.post:hover {
-      padding-left: 0.6rem;
-    }
     a.post:hover .post-title {
       color: var(--fg);
-    }
-    a.post:hover::before {
-      content: "";
-      position: absolute;
-      left: 0;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 3px;
-      height: 60%;
-      background: var(--yellow);
-      border-radius: 2px;
     }
     span.post-date {
       font-family: var(--mono);
@@ -373,7 +359,7 @@ export default function LogIndex() {
 
   return (
     <div class="page">
-      <Title>blog — caffeine.pub</Title>
+      <Title>blog / caffeine.pub</Title>
       <Nav
         links={[
           { href: "/", label: "home" },
@@ -383,7 +369,7 @@ export default function LogIndex() {
       />
 
       <div class="header">
-        <h1 class="title">the blog</h1>
+        <h1 class="title">blog</h1>
         <p class="subtitle">
           Design notes, compiler archaeology, and the occasional rant about
           why JavaScript doesn't have to be like this.
